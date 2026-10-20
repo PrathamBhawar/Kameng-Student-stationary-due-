@@ -212,13 +212,14 @@ export function NewStudent() {
   const { c, fs, isDark } = useLook();
   const { top, bottom } = useSafe();
   const ns = state.ns;
-  const editId = state.nsIdEditable;
-  const id = editId ? state.scannedId : state.scannedId || NEW_ID;
+  // The ID is always editable: filled in from a scan (correct it if it's wrong) or typed after an unreadable one.
+  const manual = state.nsIdEditable;
+  const id = state.scannedId;
   const idOk = /^\d{6,12}$/.test(id);
   const already = idOk ? state.students.find((s) => s.id === id) : undefined;
-  const ok = !!ns.name.trim() && !!ns.room.trim() && idOk && !(editId && already);
+  const ok = !!ns.name.trim() && !!ns.room.trim() && idOk && !already;
   const nameErr = state.nsTouched && !ns.name.trim();
-  const idErr = editId && (id.length > 0 || state.nsTouched) && !idOk ? 'Enter the 6–12 digit ID from the card' : null;
+  const idErr = (id.length > 0 || state.nsTouched) && !idOk ? 'Enter the 6–12 digit ID from the card' : null;
   const setNs = (p: Partial<typeof ns>) => set({ ns: { ...state.ns, ...p } });
   const save = () => {
     if (!ok) { set({ nsTouched: true }); return; }
@@ -242,19 +243,15 @@ export function NewStudent() {
         </View>
         <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <Anim type="rise" style={{ marginTop: 6 }}><T size={34} weight={800} face="display" ls={-0.03} accessibilityRole="header">New student</T></Anim>
-          <T size={16} color={c.text2} style={{ marginTop: 6 }}>{editId ? 'Barcode unreadable. Type the ID.' : 'ID found, details missing.'}</T>
+          <T size={16} color={c.text2} style={{ marginTop: 6 }}>{manual ? 'Barcode unreadable. Type the ID.' : 'ID found, details missing.'}</T>
           <Anim type="rise" delay={80} style={{ marginTop: 18, gap: 14 }}>
             <View style={{ gap: 6 }}>
               <T size={15} weight={600}>Student ID</T>
-              {editId ? (
-                <TextInput accessibilityLabel="Student ID" value={state.scannedId} placeholder="e.g. 230101015" placeholderTextColor={c.text3}
-                  onChangeText={(v) => set({ scannedId: v.replace(/\D/g, '').slice(0, 12) })} keyboardType="number-pad" autoFocus
-                  keyboardAppearance={ka} style={input({ fontFamily: 'Inter_600SemiBold', borderWidth: 2, borderColor: idErr || already ? c.red : 'transparent' })} />
-              ) : (
-                <TextInput accessibilityLabel="Student ID" value={id} editable={false} style={input({ backgroundColor: c.surface2, color: c.text2, fontFamily: 'Inter_600SemiBold' })} />
-              )}
+              <TextInput accessibilityLabel="Student ID" value={state.scannedId} placeholder="e.g. 230101015" placeholderTextColor={c.text3}
+                onChangeText={(v) => set({ scannedId: v.replace(/\D/g, '').slice(0, 12) })} keyboardType="number-pad" autoFocus={manual}
+                keyboardAppearance={ka} style={input({ fontFamily: 'Inter_600SemiBold', borderWidth: 2, borderColor: idErr || already ? c.red : 'transparent' })} />
               {idErr ? <T accessibilityRole="alert" size={14} weight={600} color={c.red}>{idErr}</T> : null}
-              {editId && already ? (
+              {already ? (
                 <View accessibilityRole="alert" style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: 14, backgroundColor: c.primarySoft }}>
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <T size={14} weight={700} color={c.primaryInk}>Already saved</T>

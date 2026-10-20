@@ -89,12 +89,13 @@ export function keyframeStyle(type: AnimType, v: Animated.Value, span = 0): any 
     case 'sheet':
       return { opacity: lerp(v, [0, 1], [0.4, 1]), transform: [{ translateY: lerp(v, [0, 1], [span * 0.6, 0]) }] };
     case 'coin':
+      // The design spins the coin with rotateY(-200deg → 12deg → 0). A real 3D turn on iOS sinks half the
+      // coin behind the layers around it, so draw the same turn as a flat flip: scaleX = cos(angle).
       return {
         opacity: lerp(v, [0, 0.72, 1], [0, 1, 1]),
         transform: [
-          { perspective: 700 },
           { translateY: lerp(v, [0, 0.72, 1], [-70, 8, 0]) },
-          { rotateY: lerp(v, [0, 0.72, 1], ['-200deg', '12deg', '0deg']) },
+          { scaleX: lerp(v, [0.0, 0.0833, 0.1667, 0.25, 0.3333, 0.4167, 0.5, 0.5833, 0.6667, 0.75, 0.8333, 0.9167, 1.0], [-0.9397, -0.9969, -0.874, -0.5933, -0.2054, 0.2196, 0.6049, 0.881, 0.9979, 0.9826, 0.9922, 0.9981, 1.0]) },
           { scale: lerp(v, [0, 0.72, 1], [0.45, 1.05, 1]) },
         ],
       };

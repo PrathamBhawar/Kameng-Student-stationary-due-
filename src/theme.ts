@@ -35,7 +35,8 @@ export const grad = {
   // radial-gradient(140% 72% at 50% 0%, ...)
   onb: [[0, '#3346F0'], [0.2, '#1E2BC4'], [0.42, '#0E1676'], [0.64, '#050830'], [0.86, '#000000'], [1, '#000000']] as Stop[],
   // radial-gradient(closest-side, ...)
-  glow: [[0, 'rgba(58,85,255,0.75)'], [0.45, 'rgba(34,54,240,0.35)'], [1, 'rgba(0,0,0,0)']] as Stop[],
+  // Ends on transparent blue (not black) to match CSS's premultiplied fade, which never goes muddy.
+  glow: [[0, 'rgba(58,85,255,0.75)'], [0.45, 'rgba(34,54,240,0.35)'], [0.72, 'rgba(34,54,240,0.13)'], [1, 'rgba(34,54,240,0)']] as Stop[],
   scan: [[0, '#2A3140'], [0.55, '#12161F'], [1, '#06080C']] as Stop[],
 };
 

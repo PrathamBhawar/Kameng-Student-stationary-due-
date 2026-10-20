@@ -4,6 +4,39 @@ import Svg, { Circle, Defs, LinearGradient, RadialGradient, Stop } from 'react-n
 
 let n = 0;
 
+// Fraction of a blurred disc's colour at k standard deviations outside its edge (normal CDF of -k).
+// CSS box-shadow blur is Gaussian with σ = blur / 2, so sampling this reproduces its soft falloff.
+const PHI: [number, number][] = [[-2, 0.977], [-1, 0.841], [-0.5, 0.691], [0, 0.5], [0.5, 0.309], [1, 0.159], [1.5, 0.067], [2, 0.023], [2.5, 0.006], [3, 0]];
+
+/** Gradient stops for a CSS-style blurred shadow of a disc of radius r, blur b, peak opacity a. */
+function shadowStops(r: number, b: number, a: number, color: string) {
+  const s = b / 2, outer = r + 3 * s;
+  return PHI.filter(([k]) => r + k * s >= 0).map(([k, f], i) => (
+    <Stop key={i} offset={(r + k * s) / outer} stopColor={color} stopOpacity={a * f} />
+  ));
+}
+
+/** The coin's blue glow (0 0 blur) and drop shadow (0 40px 80px -10px), as in the design's CSS. */
+function HaloShapes({ id, c, R, glow, blur }: { id: string; c: number; R: number; glow: number; blur: number }) {
+  const glowR = R + 1.5 * blur, sr = R - 10, shadowR = sr + 120;
+  return (
+    <>
+      <Defs>
+        <RadialGradient id={id + 'g'} cx={c} cy={c} r={glowR} fx={c} fy={c} gradientUnits="userSpaceOnUse">
+          {shadowStops(R, blur, glow, '#3A55FF')}
+        </RadialGradient>
+        <RadialGradient id={id + 'd'} cx={c} cy={c + 40} r={shadowR} fx={c} fy={c + 40} gradientUnits="userSpaceOnUse">
+          {shadowStops(sr, 80, 0.8, '#000000')}
+        </RadialGradient>
+      </Defs>
+      <Circle cx={c} cy={c} r={glowR} fill={`url(#${id}g)`} />
+      <Circle cx={c} cy={c + 40} r={shadowR} fill={`url(#${id}d)`} />
+    </>
+  );
+}
+
+const pad = (blur: number) => Math.max(1.5 * blur, 130) + 12;
+
 /**
  * The chrome coin from the design, drawn as a single SVG so it looks the same on iOS, Android and web.
  * It reproduces the design's CSS: radial shading at 34% 28%, inset top highlight and bottom shade,
@@ -11,30 +44,19 @@ let n = 0;
  */
 export function Coin({ size, inner, glow, blur, children, halo = true }: {
   size: number; inner: number; glow: number; blur: number; children?: React.ReactNode;
-  /** false draws only the disc, for a coin that flips in 3D over a separate, still CoinHalo. */
+  /** false draws only the disc, for a coin animated over a separate, still CoinHalo. */
   halo?: boolean;
 }) {
   const id = useState(() => 'coin' + ++n)[0];
   const S = size, R = S / 2;
-  const P = blur + 12; // room for the glow
-  const W = S + P * 2, H = S + P * 2 + 40; // + room for the drop shadow below
+  const P = halo ? pad(blur) : 12;
+  const W = S + P * 2, H = S + P * 2 + (halo ? 40 : 0);
   const c = P + R; // centre in canvas coordinates
-  const glowR = R + blur;
-  const shadowR = R - 10 + 80;
   return (
     <View style={{ width: S, height: S, alignItems: 'center', justifyContent: 'center' }}>
       <Svg width={W} height={H} style={{ position: 'absolute', left: -P, top: -P }} pointerEvents="none">
+        {halo ? <HaloShapes id={id} c={c} R={R} glow={glow} blur={blur} /> : null}
         <Defs>
-          <RadialGradient id={id + 'g'} cx={c} cy={c} r={glowR} fx={c} fy={c} gradientUnits="userSpaceOnUse">
-            <Stop offset={R / glowR} stopColor="#3A55FF" stopOpacity={glow} />
-            <Stop offset={(R + blur * 0.35) / glowR} stopColor="#3A55FF" stopOpacity={glow * 0.45} />
-            <Stop offset={1} stopColor="#3A55FF" stopOpacity={0} />
-          </RadialGradient>
-          <RadialGradient id={id + 'd'} cx={c} cy={c + 40} r={shadowR} fx={c} fy={c + 40} gradientUnits="userSpaceOnUse">
-            <Stop offset={(R - 50) / shadowR} stopColor="#000" stopOpacity={0.8} />
-            <Stop offset={(R - 10) / shadowR} stopColor="#000" stopOpacity={0.45} />
-            <Stop offset={1} stopColor="#000" stopOpacity={0} />
-          </RadialGradient>
           <RadialGradient id={id + 'f'} cx={c - R + S * 0.34} cy={c - R + S * 0.28} r={S * 0.977} fx={c - R + S * 0.34} fy={c - R + S * 0.28} gradientUnits="userSpaceOnUse">
             <Stop offset={0} stopColor="#FFFFFF" />
             <Stop offset={0.3} stopColor="#E4E7EF" />
@@ -61,9 +83,6 @@ export function Coin({ size, inner, glow, blur, children, halo = true }: {
             <Stop offset={1} stopColor="#000000" stopOpacity={0} />
           </LinearGradient>
         </Defs>
-        {/* CSS paints the first-listed shadow on top, so draw glow, then drop shadow, then the ring. */}
-        {halo ? <Circle cx={c} cy={c} r={glowR} fill={`url(#${id}g)`} /> : null}
-        {halo ? <Circle cx={c} cy={c + 40} r={shadowR} fill={`url(#${id}d)`} /> : null}
         <Circle cx={c} cy={c} r={R + 3.5} fill="none" stroke="#FFFFFF" strokeOpacity={0.08} strokeWidth={7} />
         <Circle cx={c} cy={c} r={R} fill={`url(#${id}f)`} />
         <Circle cx={c} cy={c} r={R} fill={`url(#${id}i)`} />
@@ -76,31 +95,14 @@ export function Coin({ size, inner, glow, blur, children, halo = true }: {
   );
 }
 
-/**
- * The coin's blue glow and drop shadow on their own. Kept outside the flipping coin: on iOS a
- * 3D-rotated view flattens and clips an oversized child like this, which broke the splash flip-in.
- */
+/** The coin's blue glow and drop shadow on their own, as a still layer under an animated coin. */
 export function CoinHalo({ size, glow, blur }: { size: number; glow: number; blur: number }) {
   const id = useState(() => 'halo' + ++n)[0];
-  const R = size / 2, P = blur + 12;
+  const R = size / 2, P = pad(blur);
   const W = size + P * 2, H = size + P * 2 + 40, c = P + R;
-  const glowR = R + blur, shadowR = R - 10 + 80;
   return (
     <Svg width={W} height={H} style={{ position: 'absolute', left: -P, top: -P }} pointerEvents="none">
-      <Defs>
-        <RadialGradient id={id + 'g'} cx={c} cy={c} r={glowR} fx={c} fy={c} gradientUnits="userSpaceOnUse">
-          <Stop offset={R / glowR} stopColor="#3A55FF" stopOpacity={glow} />
-          <Stop offset={(R + blur * 0.35) / glowR} stopColor="#3A55FF" stopOpacity={glow * 0.45} />
-          <Stop offset={1} stopColor="#3A55FF" stopOpacity={0} />
-        </RadialGradient>
-        <RadialGradient id={id + 'd'} cx={c} cy={c + 40} r={shadowR} fx={c} fy={c + 40} gradientUnits="userSpaceOnUse">
-          <Stop offset={(R - 50) / shadowR} stopColor="#000" stopOpacity={0.8} />
-          <Stop offset={(R - 10) / shadowR} stopColor="#000" stopOpacity={0.45} />
-          <Stop offset={1} stopColor="#000" stopOpacity={0} />
-        </RadialGradient>
-      </Defs>
-      <Circle cx={c} cy={c} r={glowR} fill={`url(#${id}g)`} />
-      <Circle cx={c} cy={c + 40} r={shadowR} fill={`url(#${id}d)`} />
+      <HaloShapes id={id} c={c} R={R} glow={glow} blur={blur} />
     </Svg>
   );
 }

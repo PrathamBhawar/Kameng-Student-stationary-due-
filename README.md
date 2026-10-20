@@ -10,7 +10,7 @@ npx expo start        # scan the QR code with the Camera app → opens in Expo G
 npx expo start --ios  # or the iOS Simulator (macOS)
 ```
 
-Every dependency ships in Expo Go, so no custom native build is needed.
+Uses Expo SDK 57 (the version the App Store Expo Go supports). Every dependency ships in Expo Go, so no custom native build is needed.
 
 ## Structure
 

@@ -9,15 +9,16 @@ import { Auth, Intro1, Intro2, Language, Name, Otp, SignIn, Splash } from './scr
 import { Overview, Profile, Students } from './screens/Home';
 import { EditStudent, Money, StudentDetail } from './screens/StudentScreens';
 import { NewStudent, Scan, Verify } from './screens/ScanScreens';
+import { HostelPick } from './screens/Hostel';
 
 const SCREENS: Record<Screen, React.ComponentType> = {
   splash: Splash, intro1: Intro1, intro2: Intro2, lang: Language, auth: Auth, signin: SignIn, otp: Otp, name: Name,
-  overview: Overview, students: Students, profile: Profile, scan: Scan, verify: Verify, newStudent: NewStudent,
+  hostel: HostelPick, overview: Overview, students: Students, profile: Profile, scan: Scan, verify: Verify, newStudent: NewStudent,
   student: StudentDetail, pay: Money, addDue: Money, edit: EditStudent,
 };
 
 // Screens drawn on a dark/blue ground get a light status bar.
-const LIGHT_BAR: Screen[] = ['splash', 'intro1', 'intro2', 'lang', 'auth', 'signin', 'otp', 'name', 'overview', 'scan', 'verify', 'student'];
+const LIGHT_BAR: Screen[] = ['hostel', 'splash', 'intro1', 'intro2', 'lang', 'auth', 'signin', 'otp', 'name', 'overview', 'scan', 'verify', 'student'];
 const TAB_SCREENS: Screen[] = ['overview', 'students', 'profile'];
 
 export function Navigator() {
@@ -59,7 +60,7 @@ export function Navigator() {
   }))[0];
 
   const showTabs = TAB_SCREENS.includes(top);
-  const toastBottom = showTabs ? Math.max(bottom - 6, 16) + 82 : (top === 'pay' || top === 'addDue') ? 330 : Math.max(bottom, 16) + 6;
+  const toastBottom = showTabs ? Math.max(bottom - 6, 16) + 82 : (top === 'pay' || top === 'addDue') ? 330 : top === 'hostel' ? Math.max(bottom, 16) + 76 : Math.max(bottom, 16) + 6;
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }} {...pan.panHandlers}>
       <StatusBar style={LIGHT_BAR.includes(top) || isDark ? 'light' : 'dark'} animated />

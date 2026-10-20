@@ -10,7 +10,8 @@ export type Student = {
 
 export type Status = 'overdue' | 'pending' | 'settled';
 
-export const HOSTELS = ['Kameng', 'Barak', 'Umiam', 'Manas', 'Lohit'];
+/** Hostels at IIT Guwahati. Shops can add any that are missing from the Choose hostel screen. */
+export const HOSTELS = ['Barak', 'Brahmaputra', 'Dhansiri', 'Dibang', 'Dihing', 'Disang', 'Kameng', 'Kapili', 'Lohit', 'Manas', 'Siang', 'Subansiri', 'Umiam'];
 export const NEW_ID = '240104112';
 export const DEMO_ID = '230101015';
 

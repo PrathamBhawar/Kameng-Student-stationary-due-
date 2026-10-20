@@ -139,9 +139,13 @@ function TxRow({ first, fresh, title, sub, amt, after, glyph, avBg, avFg, amtFg 
 // ───────────────────────── 18 Edit details
 export function HostelPicker({ value, onPick, h = 44 }: { value: string; onPick: (h: string) => void; h?: number }) {
   const { c } = useLook();
+  const { state } = useStore();
+  // The shop's own hostel first, then the rest of IIT Guwahati and any the shop added.
+  const list = [state.shopHostel].concat(HOSTELS, state.customHostels).filter((x, i, a) => a.indexOf(x) === i);
+  if (value && !list.includes(value)) list.push(value);
   return (
     <View accessibilityRole="radiogroup" accessibilityLabel="Hostel" style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-      {HOSTELS.map((x) => {
+      {list.map((x) => {
         const on = value === x;
         return (
           <Tap key={x} onPress={() => { tapLight(); onPick(x); }} accessibilityRole="radio" accessibilityState={{ checked: on }} label={x} scaleTo={0.94}

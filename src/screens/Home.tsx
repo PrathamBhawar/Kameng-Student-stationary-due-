@@ -186,7 +186,7 @@ export function Students() {
 const THEMES: ['light' | 'dark' | 'system', string][] = [['light', 'Light'], ['dark', 'Dark'], ['system', 'System']];
 
 export function Profile() {
-  const { state, set, resetDemo, signOut } = useStore();
+  const { state, set, go, resetDemo, signOut } = useStore();
   const { c } = useLook();
   const { top } = useSafe();
   const sizeIdx = Math.max(0, sizes.indexOf(state.size));
@@ -197,7 +197,7 @@ export function Profile() {
         <OwnerAvatar ini={(state.ownerName || 'S').trim()[0]?.toUpperCase() || 'S'} size={64} fontSize={26} />
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
           <T size={28} weight={800} face="display" ls={-0.02} accessibilityRole="header" numberOfLines={2}>{state.ownerName || 'Sampath'}</T>
-          <T size={15} color={c.text2}>Kameng Hostel Shop</T>
+          <T size={15} color={c.text2}>{state.shopHostel} Hostel Shop</T>
           {state.account && state.account.provider !== 'demo' && state.account.email ? (
             <T size={13} color={c.text3} numberOfLines={1}>
               {({ email: 'Email', google: 'Google', apple: 'Apple', phone: 'Phone', demo: 'Demo' } as const)[state.account.provider] + ' · ' + state.account.email}
@@ -243,6 +243,14 @@ export function Profile() {
 
       <T size={15} weight={700} color={c.text2} style={{ marginTop: 26, marginBottom: 10, marginHorizontal: 4 }}>Settings</T>
       <Anim type="rise" delay={140} style={{ backgroundColor: c.surface, borderRadius: 22, overflow: 'hidden' }}>
+        <Tap onPress={() => go('hostel')} label={'Hostel, ' + state.shopHostel + '. Switch hostel'} scaleTo={0.98}
+          style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingHorizontal: 16, minHeight: 60, borderBottomWidth: 1, borderBottomColor: c.line }}>
+          <T size={17} weight={600}>Hostel</T>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 }}>
+            <T size={16} weight={600} color={c.primaryInk} numberOfLines={1}>{state.shopHostel}</T>
+            <Icon name="chevron" size={20} color={c.text3} />
+          </View>
+        </Tap>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingVertical: 12, paddingHorizontal: 16, minHeight: 64 }}>
           <T size={17} weight={600}>Language</T>
           <View style={{ width: 200 }}>

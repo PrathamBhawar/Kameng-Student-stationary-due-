@@ -57,8 +57,11 @@ export function Scan() {
       if (perm && !perm.granted && perm.canAskAgain) requestPerm().then((r) => r.granted && set({ scanState: 'ready' }));
       else Linking.openSettings().catch(() => {});
     }
-    else go('newStudent', { scanState: 'ready', ns: { name: '', room: '', phone: '', hostel: 'Kameng' }, nsTouched: false });
+    else go('newStudent', { scanState: 'ready', ns: { name: '', room: '', phone: '', hostel: state.shopHostel }, nsTouched: false, nsIdEditable: false });
   };
+  /** Unreadable barcode: type the ID from the card instead. */
+  const enterIdManually = () =>
+    go('newStudent', { scanState: 'ready', scannedId: '', ns: { name: '', room: '', phone: '', hostel: state.shopHostel }, nsTouched: false, nsIdEditable: true });
   const er = !live ? ERRS[ss as keyof typeof ERRS] : null;
   const demo: [string, ScanState | 'ok'][] = [['Success', 'ok'], ['Unreadable', 'invalid'], ['Not found', 'unavailable'], ['No camera', 'denied']];
 
@@ -110,6 +113,9 @@ export function Scan() {
             <T size={24} weight={800} face="display" color="#FFFFFF" center>{er[0]}</T>
             <T size={16} color="rgba(255,255,255,0.8)" center>{er[1]}</T>
             <PillButton title={er[2]} onPress={() => errAct(ss)} bg="#FFFFFF" fg="#0B0F19" height={54} style={{ marginTop: 8, alignSelf: 'stretch' }} />
+            {ss === 'invalid' ? (
+              <PillButton title="Enter ID manually" onPress={enterIdManually} bg="rgba(255,255,255,0.14)" fg="#FFFFFF" height={54} style={{ alignSelf: 'stretch' }} />
+            ) : null}
           </View>
         </Anim>
       ) : null}
@@ -206,12 +212,16 @@ export function NewStudent() {
   const { c, fs, isDark } = useLook();
   const { top, bottom } = useSafe();
   const ns = state.ns;
-  const ok = !!ns.name.trim() && !!ns.room.trim();
+  const editId = state.nsIdEditable;
+  const id = editId ? state.scannedId : state.scannedId || NEW_ID;
+  const idOk = /^\d{6,12}$/.test(id);
+  const already = idOk ? state.students.find((s) => s.id === id) : undefined;
+  const ok = !!ns.name.trim() && !!ns.room.trim() && idOk && !(editId && already);
   const nameErr = state.nsTouched && !ns.name.trim();
+  const idErr = editId && (id.length > 0 || state.nsTouched) && !idOk ? 'Enter the 6–12 digit ID from the card' : null;
   const setNs = (p: Partial<typeof ns>) => set({ ns: { ...state.ns, ...p } });
   const save = () => {
     if (!ok) { set({ nsTouched: true }); return; }
-    const id = state.scannedId || NEW_ID;
     const exists = state.students.some((s) => s.id === id);
     const fresh = { id, name: ns.name.trim(), hostel: ns.hostel, room: ns.room.trim(), phone: ns.phone.length === 10 ? ns.phone : '', since: 0, tx: [] };
     const students = exists ? state.students.map((s) => s.id === id ? { ...s, ...fresh, tx: s.tx } : s) : state.students.concat([fresh]);
@@ -232,11 +242,29 @@ export function NewStudent() {
         </View>
         <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <Anim type="rise" style={{ marginTop: 6 }}><T size={34} weight={800} face="display" ls={-0.03} accessibilityRole="header">New student</T></Anim>
-          <T size={16} color={c.text2} style={{ marginTop: 6 }}>ID found, details missing.</T>
+          <T size={16} color={c.text2} style={{ marginTop: 6 }}>{editId ? 'Barcode unreadable. Type the ID.' : 'ID found, details missing.'}</T>
           <Anim type="rise" delay={80} style={{ marginTop: 18, gap: 14 }}>
             <View style={{ gap: 6 }}>
               <T size={15} weight={600}>Student ID</T>
-              <TextInput accessibilityLabel="Student ID" value={state.scannedId || NEW_ID} editable={false} style={input({ backgroundColor: c.surface2, color: c.text2, fontFamily: 'Inter_600SemiBold' })} />
+              {editId ? (
+                <TextInput accessibilityLabel="Student ID" value={state.scannedId} placeholder="e.g. 230101015" placeholderTextColor={c.text3}
+                  onChangeText={(v) => set({ scannedId: v.replace(/\D/g, '').slice(0, 12) })} keyboardType="number-pad" autoFocus
+                  keyboardAppearance={ka} style={input({ fontFamily: 'Inter_600SemiBold', borderWidth: 2, borderColor: idErr || already ? c.red : 'transparent' })} />
+              ) : (
+                <TextInput accessibilityLabel="Student ID" value={id} editable={false} style={input({ backgroundColor: c.surface2, color: c.text2, fontFamily: 'Inter_600SemiBold' })} />
+              )}
+              {idErr ? <T accessibilityRole="alert" size={14} weight={600} color={c.red}>{idErr}</T> : null}
+              {editId && already ? (
+                <View accessibilityRole="alert" style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: 14, backgroundColor: c.primarySoft }}>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <T size={14} weight={700} color={c.primaryInk}>Already saved</T>
+                    <T size={14} color={c.text} numberOfLines={1}>{already.name} · {already.hostel} {already.room}</T>
+                  </View>
+                  <Tap onPress={() => landOnStudent(already.id, '')} label={'Open ' + already.name} style={{ height: 40, paddingHorizontal: 14, borderRadius: 20, backgroundColor: c.primary, justifyContent: 'center' }}>
+                    <T size={14} weight={600} color="#FFFFFF">Open</T>
+                  </Tap>
+                </View>
+              ) : null}
             </View>
             <View style={{ gap: 6 }}>
               <T size={15} weight={600}>Full name</T>

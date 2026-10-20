@@ -8,7 +8,7 @@ import { Lang, strings, Strings } from './i18n';
 
 export type Screen =
   | 'splash' | 'intro1' | 'intro2' | 'lang' | 'auth' | 'signin' | 'otp' | 'name'
-  | 'overview' | 'students' | 'profile' | 'scan' | 'verify' | 'newStudent'
+  | 'hostel' | 'overview' | 'students' | 'profile' | 'scan' | 'verify' | 'newStudent'
   | 'student' | 'pay' | 'addDue' | 'edit';
 
 export type ScanState = 'ready' | 'reading' | 'invalid' | 'denied' | 'unavailable';
@@ -26,6 +26,7 @@ export type State = {
   phone: string; code: string;
   authMode: 'signup' | 'login'; authBusy: '' | 'apple' | 'google';
   ownerName: string; nameDraft: string; onboarded: boolean; account: Account | null;
+  shopHostel: string; customHostels: string[]; nsIdEditable: boolean;
   sheet: boolean;
   editHostel: string; editRoom: string;
   ns: { name: string; room: string; phone: string; hostel: string }; nsTouched: boolean;
@@ -40,6 +41,7 @@ const initial = (): State => ({
   amt: '', method: 'upi', note: '',
   phone: '98640 21873', code: '',
   authMode: 'signup', authBusy: '', ownerName: 'Sampath', nameDraft: '', onboarded: false, account: null,
+  shopHostel: 'Kameng', customHostels: [], nsIdEditable: false,
   sheet: false,
   editHostel: 'Kameng', editRoom: 'B-214',
   ns: { name: '', room: '', phone: '', hostel: 'Kameng' }, nsTouched: false,
@@ -79,6 +81,7 @@ function useStoreValue() {
           set({
             theme: saved.theme ?? 'light', size: saved.size ?? 'regular', lang: saved.lang ?? 'en',
             ownerName: saved.name ?? 'Sampath', onboarded: !!saved.onboarded, account: saved.account ?? null,
+            shopHostel: saved.shopHostel ?? 'Kameng', customHostels: Array.isArray(saved.customHostels) ? saved.customHostels : [],
             students: Array.isArray(saved.students) && saved.students.length ? saved.students : seed(),
           });
         } catch {}
@@ -93,8 +96,8 @@ function useStoreValue() {
     if (!ready) return;
     const s = ref.current;
     const students = s.students.map((x) => ({ ...x, tx: x.tx.map((t) => ({ ...t, fresh: false })) }));
-    AsyncStorage.setItem(KEY, JSON.stringify({ theme: s.theme, size: s.size, lang: s.lang, name: s.ownerName, onboarded: s.onboarded, account: s.account, students })).catch(() => {});
-  }, [ready, state.theme, state.size, state.lang, state.ownerName, state.onboarded, state.account, state.students]);
+    AsyncStorage.setItem(KEY, JSON.stringify({ theme: s.theme, size: s.size, lang: s.lang, name: s.ownerName, onboarded: s.onboarded, account: s.account, shopHostel: s.shopHostel, customHostels: s.customHostels, students })).catch(() => {});
+  }, [ready, state.theme, state.size, state.lang, state.ownerName, state.onboarded, state.account, state.shopHostel, state.customHostels, state.students]);
 
   const top = () => { const s = ref.current.stack; return s[s.length - 1]; };
 
@@ -128,10 +131,10 @@ function useStoreValue() {
       set({ authBusy: k });
       return true;
     };
-    /** Signed in: go straight to the Overview. */
+    /** Signed in: choose the shop's hostel, then the Overview. */
     const enterApp = (name: string, a: Account, msg: string) => {
       tapSuccess();
-      set({ authBusy: '', account: a, ownerName: name, onboarded: true, stack: ['overview'], dir: 1 });
+      set({ authBusy: '', account: a, ownerName: name, onboarded: true, stack: ['hostel'], dir: 1 });
       toast(msg);
     };
     /**

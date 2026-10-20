@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { Anim, reducedMotion } from '../anim';
 import { AnimatedLogo, LogoMark } from '../components/Logo';
-import { Coin } from '../components/Coin';
+import { Coin, CoinHalo } from '../components/Coin';
 import { appleSignIn, GoogleAuth, googleUnavailableReason } from '../auth';
 import { Avatar, DismissKeyboard, Glass, Icon, LinearBg, OwnerAvatar, PillButton, RadialBg, SheenBar, T, Tap } from '../components/ui';
 import { AppleLogo, GoogleG } from '../components/Brand';
@@ -46,9 +46,13 @@ export function Splash() {
         {/* Two radar pulses as the coin lands, finished about a second after it settles. */}
         <Anim type="ringOnce" delay={1000} style={styles.ring} />
         <Anim type="ringOnce" delay={1250} style={styles.ring} />
+        {/* Glow and shadow stay still and fade in as the coin lands; only the disc flips. */}
+        <Anim type="fade" delay={650} pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, width: 196, height: 196 }}>
+          <CoinHalo size={196} glow={0.55} blur={110} />
+        </Anim>
         <Anim type="coin">
           <Anim type="float" delay={1800}>
-            <Coin size={196} inner={154} glow={0.55} blur={110}>
+            <Coin size={196} inner={154} glow={0.55} blur={110} halo={false}>
               <AnimatedLogo size={92} />
               <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: 98, overflow: 'hidden' }]}>
                 <Anim type="sheen" delay={1400} span={385} style={{ position: 'absolute', top: -39, left: -88, width: 74, height: 274 }}>
@@ -317,7 +321,7 @@ export function Language() {
   );
 }
 
-function RadioDot({ on }: { on: boolean }) {
+export function RadioDot({ on }: { on: boolean }) {
   const v = useState(() => new Animated.Value(on ? 1 : 0))[0];
   useEffect(() => { Animated.spring(v, { toValue: on ? 1 : 0, useNativeDriver: true, bounciness: 10, speed: 20 }).start(); }, [on, v]);
   return (
@@ -651,7 +655,7 @@ export function Name() {
   const ini = draft ? draft.split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase() : '?';
   const done = () => {
     if (!ok) return;
-    set({ ownerName: draft, stack: ['overview'], dir: 1, onboarded: true });
+    set({ ownerName: draft, stack: ['hostel'], dir: 1, onboarded: true });
     toast('Welcome, ' + draft.split(/\s+/)[0]);
   };
   return (

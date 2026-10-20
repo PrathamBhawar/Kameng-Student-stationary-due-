@@ -9,8 +9,10 @@ let n = 0;
  * It reproduces the design's CSS: radial shading at 34% 28%, inset top highlight and bottom shade,
  * a 7px faint outer ring, a soft drop shadow and a blue glow, plus the engraved inner ring.
  */
-export function Coin({ size, inner, glow, blur, children }: {
+export function Coin({ size, inner, glow, blur, children, halo = true }: {
   size: number; inner: number; glow: number; blur: number; children?: React.ReactNode;
+  /** false draws only the disc, for a coin that flips in 3D over a separate, still CoinHalo. */
+  halo?: boolean;
 }) {
   const id = useState(() => 'coin' + ++n)[0];
   const S = size, R = S / 2;
@@ -60,8 +62,8 @@ export function Coin({ size, inner, glow, blur, children }: {
           </LinearGradient>
         </Defs>
         {/* CSS paints the first-listed shadow on top, so draw glow, then drop shadow, then the ring. */}
-        <Circle cx={c} cy={c} r={glowR} fill={`url(#${id}g)`} />
-        <Circle cx={c} cy={c + 40} r={shadowR} fill={`url(#${id}d)`} />
+        {halo ? <Circle cx={c} cy={c} r={glowR} fill={`url(#${id}g)`} /> : null}
+        {halo ? <Circle cx={c} cy={c + 40} r={shadowR} fill={`url(#${id}d)`} /> : null}
         <Circle cx={c} cy={c} r={R + 3.5} fill="none" stroke="#FFFFFF" strokeOpacity={0.08} strokeWidth={7} />
         <Circle cx={c} cy={c} r={R} fill={`url(#${id}f)`} />
         <Circle cx={c} cy={c} r={R} fill={`url(#${id}i)`} />
@@ -71,5 +73,34 @@ export function Coin({ size, inner, glow, blur, children }: {
       {/* Its own positioned layer, so the mark always paints above the coin on every platform. */}
       <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}>{children}</View>
     </View>
+  );
+}
+
+/**
+ * The coin's blue glow and drop shadow on their own. Kept outside the flipping coin: on iOS a
+ * 3D-rotated view flattens and clips an oversized child like this, which broke the splash flip-in.
+ */
+export function CoinHalo({ size, glow, blur }: { size: number; glow: number; blur: number }) {
+  const id = useState(() => 'halo' + ++n)[0];
+  const R = size / 2, P = blur + 12;
+  const W = size + P * 2, H = size + P * 2 + 40, c = P + R;
+  const glowR = R + blur, shadowR = R - 10 + 80;
+  return (
+    <Svg width={W} height={H} style={{ position: 'absolute', left: -P, top: -P }} pointerEvents="none">
+      <Defs>
+        <RadialGradient id={id + 'g'} cx={c} cy={c} r={glowR} fx={c} fy={c} gradientUnits="userSpaceOnUse">
+          <Stop offset={R / glowR} stopColor="#3A55FF" stopOpacity={glow} />
+          <Stop offset={(R + blur * 0.35) / glowR} stopColor="#3A55FF" stopOpacity={glow * 0.45} />
+          <Stop offset={1} stopColor="#3A55FF" stopOpacity={0} />
+        </RadialGradient>
+        <RadialGradient id={id + 'd'} cx={c} cy={c + 40} r={shadowR} fx={c} fy={c + 40} gradientUnits="userSpaceOnUse">
+          <Stop offset={(R - 50) / shadowR} stopColor="#000" stopOpacity={0.8} />
+          <Stop offset={(R - 10) / shadowR} stopColor="#000" stopOpacity={0.45} />
+          <Stop offset={1} stopColor="#000" stopOpacity={0} />
+        </RadialGradient>
+      </Defs>
+      <Circle cx={c} cy={c} r={glowR} fill={`url(#${id}g)`} />
+      <Circle cx={c} cy={c + 40} r={shadowR} fill={`url(#${id}d)`} />
+    </Svg>
   );
 }

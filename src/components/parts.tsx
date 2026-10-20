@@ -176,7 +176,7 @@ export function RemindSheet() {
   if (!mounted) return null;
   const s = find(state.sel);
   const ph = s.phone;
-  const msg = 'Hi ' + s.name.split(' ')[0] + ', this is ' + firstName(state.ownerName) + ' from Kameng Hostel shop. Your balance is ' + rs(bal(s)) + '. Please check. Thank you.';
+  const msg = 'Hi ' + s.name.split(' ')[0] + ', this is ' + firstName(state.ownerName) + ' from ' + state.shopHostel + ' Hostel shop. Your balance is ' + rs(bal(s)) + '. Please check. Thank you.';
   const openUrl = async (url: string, fallback: string | null, ok: string, fail: string) => {
     closeRemind();
     try {

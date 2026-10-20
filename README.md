@@ -1,4 +1,4 @@
-# Student Dues — iOS app
+# Kameng Student Stationary Dues — iOS app
 
 Expo (React Native + TypeScript) implementation of the "Student Dues — iOS app" design canvas (Clear Blue design language).
 

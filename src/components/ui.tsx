@@ -117,11 +117,15 @@ export function RadialBg({ stops, cx = '50%', cy = '50%', rx = '50%', ry = '50%'
   stops: GStop[]; cx?: string; cy?: string; rx?: string; ry?: string; style?: StyleProp<ViewStyle>;
 }) {
   const id = useGid();
+  // rx/ry are not standard SVG (browsers ignore them), so draw a unit circle and stretch it with
+  // gradientTransform: iOS, Android and the web then all paint the same ellipse.
+  const f = (p: string) => parseFloat(p) / 100;
+  const m = `matrix(${f(rx)} 0 0 ${f(ry)} ${f(cx)} ${f(cy)})`;
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, style]}>
       <Svg width="100%" height="100%" preserveAspectRatio="none">
         <Defs>
-          <RadialGradient id={id} cx={cx} cy={cy} rx={rx} ry={ry} fx={cx} fy={cy} gradientUnits="objectBoundingBox">
+          <RadialGradient id={id} cx="0" cy="0" r="1" fx="0" fy="0" gradientUnits="objectBoundingBox" gradientTransform={m}>
             {stops.map(([o, col], i) => <Stop key={i} offset={o} stopColor={toHex(col)} stopOpacity={alphaOf(col)} />)}
           </RadialGradient>
         </Defs>

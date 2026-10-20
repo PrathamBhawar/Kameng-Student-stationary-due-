@@ -198,6 +198,11 @@ export function Profile() {
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
           <T size={28} weight={800} face="display" ls={-0.02} accessibilityRole="header" numberOfLines={2}>{state.ownerName || 'Sampath'}</T>
           <T size={15} color={c.text2}>Kameng Hostel Shop</T>
+          {state.account && state.account.provider !== 'demo' && state.account.email ? (
+            <T size={13} color={c.text3} numberOfLines={1}>
+              {(state.account.provider === 'google' ? 'Google' : state.account.provider === 'apple' ? 'Apple' : 'Phone') + ' · ' + state.account.email}
+            </T>
+          ) : null}
         </View>
       </Anim>
 

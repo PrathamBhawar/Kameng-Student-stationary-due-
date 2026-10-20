@@ -14,6 +14,8 @@ export type Screen =
 export type ScanState = 'ready' | 'reading' | 'invalid' | 'denied' | 'unavailable';
 export type ThemeKey = 'light' | 'dark' | 'system';
 export type Filter = 'all' | 'pending' | 'overdue' | 'settled';
+/** Who is signed in, and how. `email` holds the phone number for phone sign-in. */
+export type Account = { provider: 'google' | 'apple' | 'phone' | 'demo'; name: string; email: string };
 
 export type State = {
   stack: Screen[]; dir: 1 | -1;
@@ -23,11 +25,11 @@ export type State = {
   amt: string; method: 'upi' | 'cash'; note: string;
   phone: string; code: string;
   authMode: 'signup' | 'login'; authBusy: '' | 'apple' | 'google';
-  ownerName: string; nameDraft: string; onboarded: boolean;
+  ownerName: string; nameDraft: string; onboarded: boolean; account: Account | null;
   sheet: boolean;
   editHostel: string; editRoom: string;
   ns: { name: string; room: string; phone: string; hostel: string }; nsTouched: boolean;
-  toast: string; toastOn: boolean; toastSeq: number; torch: boolean; saving: boolean;
+  toast: string; toastOn: boolean; toastSeq: number; toastWarn: boolean; torch: boolean; saving: boolean;
 };
 
 const initial = (): State => ({
@@ -37,11 +39,11 @@ const initial = (): State => ({
   q: '', f: 'all',
   amt: '', method: 'upi', note: '',
   phone: '98640 21873', code: '',
-  authMode: 'signup', authBusy: '', ownerName: 'Sampath', nameDraft: '', onboarded: false,
+  authMode: 'signup', authBusy: '', ownerName: 'Sampath', nameDraft: '', onboarded: false, account: null,
   sheet: false,
   editHostel: 'Kameng', editRoom: 'B-214',
   ns: { name: '', room: '', phone: '', hostel: 'Kameng' }, nsTouched: false,
-  toast: '', toastOn: false, toastSeq: 0, torch: false, saving: false,
+  toast: '', toastOn: false, toastSeq: 0, toastWarn: false, torch: false, saving: false,
 });
 
 const KEY = 'studentDues.v1';
@@ -76,7 +78,7 @@ function useStoreValue() {
           const saved = JSON.parse(raw);
           set({
             theme: saved.theme ?? 'light', size: saved.size ?? 'regular', lang: saved.lang ?? 'en',
-            ownerName: saved.name ?? 'Sampath', onboarded: !!saved.onboarded,
+            ownerName: saved.name ?? 'Sampath', onboarded: !!saved.onboarded, account: saved.account ?? null,
             students: Array.isArray(saved.students) && saved.students.length ? saved.students : seed(),
           });
         } catch {}
@@ -91,8 +93,8 @@ function useStoreValue() {
     if (!ready) return;
     const s = ref.current;
     const students = s.students.map((x) => ({ ...x, tx: x.tx.map((t) => ({ ...t, fresh: false })) }));
-    AsyncStorage.setItem(KEY, JSON.stringify({ theme: s.theme, size: s.size, lang: s.lang, name: s.ownerName, onboarded: s.onboarded, students })).catch(() => {});
-  }, [ready, state.theme, state.size, state.lang, state.ownerName, state.onboarded, state.students]);
+    AsyncStorage.setItem(KEY, JSON.stringify({ theme: s.theme, size: s.size, lang: s.lang, name: s.ownerName, onboarded: s.onboarded, account: s.account, students })).catch(() => {});
+  }, [ready, state.theme, state.size, state.lang, state.ownerName, state.onboarded, state.account, state.students]);
 
   const top = () => { const s = ref.current.stack; return s[s.length - 1]; };
 
@@ -106,8 +108,8 @@ function useStoreValue() {
       if (top() !== scr) tapLight();
       set({ stack: [scr], dir: 1, sheet: false, scanState: 'ready' });
     };
-    const toast = (msg: string) => {
-      set((s) => ({ toast: msg, toastOn: true, toastSeq: s.toastSeq + 1 }));
+    const toast = (msg: string, warn = false) => {
+      set((s) => ({ toast: msg, toastOn: true, toastSeq: s.toastSeq + 1, toastWarn: warn }));
       if (toastTimer.current) clearTimeout(toastTimer.current);
       toastTimer.current = setTimeout(() => set({ toastOn: false }), 2400);
     };
@@ -119,14 +121,31 @@ function useStoreValue() {
       set({ stack: s, dir: 1, sel: id, saving: false, amt: '', note: '' });
       if (msg) toast(msg);
     };
-    const social = (k: 'apple' | 'google') => {
-      if (ref.current.authBusy) return;
+    /** Shows "Connecting…" on a sign-in button. Returns false if another sign-in is already running. */
+    const authStart = (k: 'apple' | 'google') => {
+      if (ref.current.authBusy) return false;
       tapMedium();
       set({ authBusy: k });
+      return true;
+    };
+    /** A real sign-in finished: remember the account and pre-fill the name step. */
+    const authDone = (a: Account) => {
+      tapSuccess();
+      set((s) => ({ authBusy: '', account: a, stack: s.stack.concat(['name']), dir: 1, nameDraft: a.name }));
+      toast(a.email ? 'Signed in as ' + a.email : 'Signed in with ' + (a.provider === 'apple' ? 'Apple' : 'Google'));
+    };
+    /** Sign-in failed or was cancelled (message null). */
+    const authFail = (message: string | null) => {
+      set({ authBusy: '' });
+      if (message) { tapWarn(); toast(message, true); }
+    };
+    /** Sign-in that can't run on this device: explain why, then continue as a demo account. */
+    const demoSignIn = (k: 'apple' | 'google', reason: string) => {
+      if (!authStart(k)) return;
       later(() => {
-        set((s) => ({ authBusy: '', stack: s.stack.concat(['name']), dir: 1, nameDraft: '' }));
-        toast((k === 'apple' ? 'Apple' : 'Google') + ' sign-in · demo');
-      }, 1000);
+        set((s) => ({ authBusy: '', account: { provider: 'demo', name: '', email: '' }, stack: s.stack.concat(['name']), dir: 1, nameDraft: '' }));
+        toast(reason + ' · demo', true);
+      }, 900);
     };
     const addTx = (type: 'due' | 'pay') => {
       const st = ref.current;
@@ -162,7 +181,7 @@ function useStoreValue() {
     const openRemind = () => { tapMedium(); set({ sheet: true }); };
     const closeRemind = () => set({ sheet: false });
     const resetDemo = () => set({ students: seed(), stack: ['splash'], dir: -1, q: '', f: 'all', onboarded: false });
-    const signOut = () => set({ stack: ['auth'], dir: -1, authMode: 'login', code: '', onboarded: false });
+    const signOut = () => set({ stack: ['auth'], dir: -1, authMode: 'login', code: '', onboarded: false, account: null });
     /** Shows "Reading…" briefly, then opens Student found for `id`. */
     const startScanRead = (id: string = DEMO_ID) => {
       tapMedium();
@@ -181,7 +200,7 @@ function useStoreValue() {
       tapWarn();
       set({ scanState: 'unavailable', scannedId: id });
     };
-    return { set, go, back, tab, toast, find, landOnStudent, social, addTx, press, openRemind, closeRemind, resetDemo, signOut, startScanRead, handleScan, later };
+    return { set, go, back, tab, toast, find, landOnStudent, authStart, authDone, authFail, demoSignIn, addTx, press, openRemind, closeRemind, resetDemo, signOut, startScanRead, handleScan, later };
   }, [set, later]);
 
   return { state, ready, ...actions };

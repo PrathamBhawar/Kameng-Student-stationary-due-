@@ -1,7 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Animated, KeyboardAvoidingView, Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { Anim, reducedMotion } from '../anim';
 import { AnimatedLogo, LogoMark } from '../components/Logo';
+import { Coin } from '../components/Coin';
+import { appleSignIn, GoogleAuth, googleUnavailableReason } from '../auth';
 import { Avatar, Glass, Icon, LinearBg, OwnerAvatar, PillButton, RadialBg, SheenBar, T, Tap } from '../components/ui';
 import { BackBtn, Barcode, Keypad } from '../components/parts';
 import { grad } from '../theme';
@@ -30,26 +32,6 @@ export function Glow({ size, top, left, h, stops = grad.glow }: { size: number; 
   );
 }
 
-/** Chrome coin with radial shading, used on splash and auth. */
-function Coin({ size, children, glow = 0.55 }: { size: number; children: React.ReactNode; glow?: number }) {
-  return (
-    <View style={{ width: size, height: size, borderRadius: size / 2, shadowColor: '#3A55FF', shadowOpacity: glow, shadowRadius: size * 0.28, shadowOffset: { width: 0, height: 0 } }}>
-      <View style={{ width: size, height: size, borderRadius: size / 2, shadowColor: '#000', shadowOpacity: 0.8, shadowRadius: 40, shadowOffset: { width: 0, height: 40 } }}>
-        <View style={{ width: size, height: size, borderRadius: size / 2, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', borderWidth: 7, borderColor: 'rgba(255,255,255,0.08)' }}>
-          <RadialBg stops={[[0, '#FFFFFF'], [0.3, '#E4E7EF'], [0.64, '#B3B9C9'], [1, '#7F8699']]} cx="34%" cy="28%" rx="98%" ry="98%" />
-          <View style={[StyleSheet.absoluteFill, { borderRadius: size / 2, borderTopWidth: 3, borderTopColor: 'rgba(255,255,255,0.9)', borderBottomWidth: 4, borderBottomColor: 'rgba(0,0,0,0.12)' }]} />
-          {children}
-        </View>
-      </View>
-    </View>
-  );
-}
-
-const innerRing = (d: number) => ({
-  width: d, height: d, borderRadius: d / 2, alignItems: 'center' as const, justifyContent: 'center' as const,
-  borderTopWidth: 2, borderTopColor: 'rgba(0,0,0,0.14)', borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.8)',
-});
-
 // ───────────────────────── 01 Splash
 export function Splash() {
   const { state, go, tab } = useStore();
@@ -63,8 +45,8 @@ export function Splash() {
         <Anim type="ring" delay={2200} style={styles.ring} />
         <Anim type="coin">
           <Anim type="float" delay={1800}>
-            <Coin size={196}>
-              <View style={innerRing(154)}><AnimatedLogo size={92} /></View>
+            <Coin size={196} inner={154} glow={0.55} blur={110}>
+              <AnimatedLogo size={92} />
               <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: 98, overflow: 'hidden' }]}>
                 <Anim type="sheen" delay={1400} span={385} style={{ position: 'absolute', top: -39, left: -88, width: 74, height: 274 }}>
                   <SheenBar width={74} height={274} />
@@ -379,13 +361,34 @@ export function Segmented<K extends string>({ options, value, onChange, pad = 4,
 }
 
 export function Auth() {
-  const { state, set, back, go, social, tab } = useStore();
+  const { state, set, back, go, tab, authStart, authDone, authFail, demoSignIn } = useStore();
   const { top, bottom, width, k } = useSafe();
   const signup = state.authMode === 'signup';
   const busy = state.authBusy;
   const coinTop = (top + 114) * k;
+
+  // Google: the real OAuth popup / sheet when client IDs are set up outside Expo Go, otherwise a labelled demo.
+  const googleReason = googleUnavailableReason();
+  const googlePrompt = useRef<(() => Promise<void>) | null>(null);
+  const onGoogle = () => {
+    if (googleReason || !googlePrompt.current) { demoSignIn('google', googleReason || 'Google sign-in is still loading'); return; }
+    if (!authStart('google')) return;
+    googlePrompt.current().catch(() => authFail('Couldn’t open Google sign-in'));
+  };
+  // Apple: the native Sign in with Apple sheet on iPhone (works in Expo Go too).
+  const onApple = () => {
+    if (Platform.OS !== 'ios') { demoSignIn('apple', 'Sign in with Apple is available on iPhone'); return; }
+    if (!authStart('apple')) return;
+    appleSignIn()
+      .then((p) => (p ? authDone(p) : authFail(null)))
+      .catch((e) => authFail(e?.message || 'Apple sign-in failed'));
+  };
+
   return (
     <View style={{ flex: 1, overflow: 'hidden' }}>
+      {googleReason ? null : (
+        <GoogleAuth register={(fn) => { googlePrompt.current = fn; }} onProfile={authDone} onError={authFail} />
+      )}
       <OnbBg />
       <Glow size={460} top={coinTop + 88 - 230} />
       <View style={{ position: 'absolute', top: top + 4, left: 16, right: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -400,8 +403,8 @@ export function Auth() {
 
       <Anim type="pop" delay={120} pointerEvents="none" style={{ position: 'absolute', left: width / 2 - 88, top: coinTop }}>
         <Anim type="float" delay={900}>
-          <Coin size={176} glow={0.45}>
-            <View style={innerRing(138)}><LogoMark size={78} bar="#8D94A7" dot="#8D94A7" check="#EEF0F5" /></View>
+          <Coin size={176} inner={138} glow={0.45} blur={90}>
+            <LogoMark size={78} bar="#8D94A7" dot="#8D94A7" check="#EEF0F5" />
           </Coin>
         </Anim>
       </Anim>
@@ -417,10 +420,10 @@ export function Auth() {
 
       <View style={{ position: 'absolute', left: 16, right: 16, bottom: Math.max(bottom - 4, 16), gap: 10 }}>
         <Anim type="rise" delay={320} replayKey={state.authMode} style={{ opacity: busy && busy !== 'apple' ? 0.5 : 1 }}>
-          <PillButton title={busy === 'apple' ? 'Connecting…' : 'Continue with Apple'} onPress={() => social('apple')} bg={W} fg="#000" />
+          <PillButton title={busy === 'apple' ? 'Connecting…' : 'Continue with Apple'} onPress={onApple} bg={W} fg="#000" />
         </Anim>
         <Anim type="rise" delay={380} replayKey={state.authMode} style={{ opacity: busy && busy !== 'google' ? 0.5 : 1 }}>
-          <Tap onPress={() => social('google')} label="Continue with Google">
+          <Tap onPress={onGoogle} label="Continue with Google">
             <Glass tint="rgba(255,255,255,0.14)" radius={28} intensity={20} style={{ height: 56, alignItems: 'center', justifyContent: 'center' }}>
               <T size={17} weight={600} color={W}>{busy === 'google' ? 'Connecting…' : 'Continue with Google'}</T>
             </Glass>
@@ -431,7 +434,7 @@ export function Auth() {
             <Icon name="device" size={20} color={W} />
           </PillButton>
         </Anim>
-        <Tap onPress={() => { set({ onboarded: true }); tab('overview'); }} label="Try demo" style={{ marginTop: 4, padding: 8, alignItems: 'center' }}>
+        <Tap onPress={() => { set({ onboarded: true, account: { provider: 'demo', name: '', email: '' } }); tab('overview'); }} label="Try demo" style={{ marginTop: 4, padding: 8, alignItems: 'center' }}>
           <T size={15} weight={600} color="rgba(255,255,255,0.85)">Try demo</T>
         </Tap>
       </View>
@@ -504,7 +507,7 @@ export function Otp() {
         </Tap>
       )}
       <View style={{ flex: 1 }} />
-      <PillButton title="Verify" disabled={!ok} onPress={() => ok && go('name', { nameDraft: '' })} style={{ marginBottom: 12 }}
+      <PillButton title="Verify" disabled={!ok} onPress={() => ok && go('name', { nameDraft: '', account: { provider: 'phone', name: '', email: '+91 ' + state.phone } })} style={{ marginBottom: 12 }}
         bg={ok ? W : 'rgba(255,255,255,0.2)'} fg={ok ? '#0B0F19' : 'rgba(255,255,255,0.6)'} />
       <Keypad kind="otp" />
     </View>

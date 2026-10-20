@@ -75,7 +75,9 @@ export function Toast({ bottom }: { bottom: number }) {
           shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 15, shadowOffset: { width: 0, height: 10 },
           opacity: v, transform: [{ translateY: v.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }, { scale: v.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1] }) }],
         }}>
-        <Icon name="check" size={18} color={c.toastIcon} sw={2.6} />
+        {state.toastWarn
+          ? <Icon name="alert" size={18} color={c.toastBg === '#0B0F19' ? '#FFB4AB' : c.red} sw={2.4} />
+          : <Icon name="check" size={18} color={c.toastIcon} sw={2.6} />}
         <T size={15} weight={600} color={c.toastFg} numberOfLines={1} style={{ maxWidth: 290 }}>{state.toast}</T>
       </Animated.View>
     </View>

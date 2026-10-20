@@ -200,7 +200,7 @@ export function Profile() {
           <T size={15} color={c.text2}>Kameng Hostel Shop</T>
           {state.account && state.account.provider !== 'demo' && state.account.email ? (
             <T size={13} color={c.text3} numberOfLines={1}>
-              {(state.account.provider === 'google' ? 'Google' : state.account.provider === 'apple' ? 'Apple' : 'Phone') + ' · ' + state.account.email}
+              {({ email: 'Email', google: 'Google', apple: 'Apple', phone: 'Phone', demo: 'Demo' } as const)[state.account.provider] + ' · ' + state.account.email}
             </T>
           ) : null}
         </View>

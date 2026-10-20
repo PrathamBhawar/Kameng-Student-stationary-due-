@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, KeyboardAvoidingView, Platform, ScrollView, TextInput, View } from 'react-native';
 import { Anim, reducedMotion } from '../anim';
-import { Avatar, Icon, LinearBg, PillButton, RadialBg, T, Tap } from '../components/ui';
+import { Avatar, DismissKeyboard, Icon, LinearBg, PillButton, RadialBg, T, Tap } from '../components/ui';
 import { BackBtn, Keypad } from '../components/parts';
 import { bal, fmt, HOSTELS, initials, prettyPhone, rs } from '../data';
 import { grad } from '../theme';
@@ -170,6 +170,7 @@ export function EditStudent() {
   };
   const locked: [string, string][] = [['Name', s.name], ['Student ID', s.id], ['Phone', prettyPhone(s.phone)]];
   return (
+    <DismissKeyboard>
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: c.bg }}>
       <View style={{ flex: 1, paddingTop: top + 2, paddingHorizontal: 16, paddingBottom: Math.max(bottom - 2, 16) }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 44 }}>
@@ -202,6 +203,7 @@ export function EditStudent() {
         <PillButton title="Save" disabled={!ok} onPress={save} bg={ok ? c.primary : c.disBg} fg={ok ? '#FFFFFF' : c.disFg} style={{ marginTop: 12 }} />
       </View>
     </KeyboardAvoidingView>
+    </DismissKeyboard>
   );
 }
 

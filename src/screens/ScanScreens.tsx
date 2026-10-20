@@ -3,7 +3,7 @@ import { Animated, KeyboardAvoidingView, Linking, Platform, ScrollView, StyleShe
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import Svg, { Path } from 'react-native-svg';
 import { Anim } from '../anim';
-import { Avatar, Icon, PillButton, RadialBg, T, Tap } from '../components/ui';
+import { Avatar, DismissKeyboard, Icon, PillButton, RadialBg, T, Tap } from '../components/ui';
 import { BackBtn, Barcode } from '../components/parts';
 import { bal, initials, prettyPhone, rs, NEW_ID } from '../data';
 import { grad } from '../theme';
@@ -223,6 +223,7 @@ export function NewStudent() {
   });
   const ka = isDark ? 'dark' : 'light';
   return (
+    <DismissKeyboard>
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: c.bg }}>
       <View style={{ flex: 1, paddingTop: top + 2, paddingHorizontal: 16, paddingBottom: Math.max(bottom - 2, 16) }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 44 }}>
@@ -265,6 +266,7 @@ export function NewStudent() {
         <PillButton title="Save & add due" disabled={!ok} onPress={save} bg={ok ? c.primary : c.disBg} fg={ok ? '#FFFFFF' : c.disFg} style={{ marginTop: 12 }} />
       </View>
     </KeyboardAvoidingView>
+    </DismissKeyboard>
   );
 }
 

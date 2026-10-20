@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Animated, Pressable, PressableProps, StyleProp, StyleSheet, Text, TextProps, TextStyle, View, ViewStyle } from 'react-native';
+import { Animated, Keyboard, Pressable, PressableProps, StyleProp, StyleSheet, Text, TextProps, TextStyle, View, ViewStyle } from 'react-native';
 import Svg, { Defs, LinearGradient as SvgLinear, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -74,6 +74,8 @@ export const ICONS = {
   alert: ['M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0', 'M12 7.5v5.5M12 16.5h.01'],
   device: ['M9.5 3h5A2.5 2.5 0 0 1 17 5.5v13a2.5 2.5 0 0 1-2.5 2.5h-5A2.5 2.5 0 0 1 7 18.5v-13A2.5 2.5 0 0 1 9.5 3z', 'M11 18h2'],
   check: ['M5 12.5l4.5 4.5L19 7'],
+  eye: ['M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z', 'M9 12a3 3 0 1 0 6 0a3 3 0 1 0 -6 0'],
+  eyeOff: ['M3 3l18 18', 'M10.6 5.1A10.4 10.4 0 0 1 12 5c6.5 0 10 7 10 7a17.6 17.6 0 0 1-3.2 4.2M6.6 6.6C3.8 8.4 2 12 2 12s3.5 7 10 7c1.8 0 3.4-.5 4.7-1.3', 'M9.9 9.9a3 3 0 0 0 4.2 4.2'],
   del: ['M9 5h11v14H9l-6-7z', 'M12.5 9.5l5 5M17.5 9.5l-5 5'],
   whatsapp: ['M4 20l1.3-3.9A8 8 0 1 1 8 19z', 'M9 11.5h.01M12 11.5h.01M15 11.5h.01'],
   call: ['M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a1 1 0 0 1-1 1A16 16 0 0 1 4 5a1 1 0 0 1 1-1z'],
@@ -117,19 +119,22 @@ export function RadialBg({ stops, cx = '50%', cy = '50%', rx = '50%', ry = '50%'
   stops: GStop[]; cx?: string; cy?: string; rx?: string; ry?: string; style?: StyleProp<ViewStyle>;
 }) {
   const id = useGid();
-  // rx/ry are not standard SVG (browsers ignore them), so draw a unit circle and stretch it with
-  // gradientTransform: iOS, Android and the web then all paint the same ellipse.
+  // Neither rx/ry (non-standard) nor gradientTransform renders the same on iOS, Android and web.
+  // Instead draw a plain circular gradient in a viewBox sized 1/rx × 1/ry and let
+  // preserveAspectRatio="none" stretch it to the box: the circle of radius 1 becomes an
+  // ellipse of rx × width by ry × height, centred at (cx, cy) — identical on every platform.
   const f = (p: string) => parseFloat(p) / 100;
-  const m = `matrix(${f(rx)} 0 0 ${f(ry)} ${f(cx)} ${f(cy)})`;
+  const vw = 1 / f(rx), vh = 1 / f(ry);
+  const gx = f(cx) * vw, gy = f(cy) * vh;
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, style]}>
-      <Svg width="100%" height="100%" preserveAspectRatio="none">
+      <Svg width="100%" height="100%" viewBox={`0 0 ${vw} ${vh}`} preserveAspectRatio="none">
         <Defs>
-          <RadialGradient id={id} cx="0" cy="0" r="1" fx="0" fy="0" gradientUnits="objectBoundingBox" gradientTransform={m}>
+          <RadialGradient id={id} cx={gx} cy={gy} r={1} fx={gx} fy={gy} gradientUnits="userSpaceOnUse">
             {stops.map(([o, col], i) => <Stop key={i} offset={o} stopColor={toHex(col)} stopOpacity={alphaOf(col)} />)}
           </RadialGradient>
         </Defs>
-        <Rect x="0" y="0" width="100%" height="100%" fill={`url(#${id})`} />
+        <Rect x={0} y={0} width={vw} height={vh} fill={`url(#${id})`} />
       </Svg>
     </View>
   );
@@ -170,9 +175,10 @@ export function Glass({ tint, intensity = 30, dark = true, style, children, radi
   tint: string; intensity?: number; dark?: boolean; style?: StyleProp<ViewStyle>; children?: React.ReactNode; radius?: number;
 }) {
   return (
-    <View style={[{ borderRadius: radius, overflow: 'hidden' }, style]}>
-      <BlurView intensity={intensity} tint={dark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: tint }]} />
+    // zIndex 0 makes this its own layer; the blur and tint sit at -1 so the content always paints on top.
+    <View style={[{ borderRadius: radius, overflow: 'hidden', zIndex: 0 }, style]}>
+      <BlurView intensity={intensity} tint={dark ? 'dark' : 'light'} style={[StyleSheet.absoluteFill, { zIndex: -1 }]} />
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: tint, zIndex: -1 }]} />
       {children}
     </View>
   );
@@ -210,5 +216,14 @@ export function PillButton({ title, onPress, bg, fg, disabled, style, height = 5
       {children}
       {title ? <T size={size} weight={600} color={fg}>{title}</T> : null}
     </Tap>
+  );
+}
+
+/** Closes the on-screen keyboard when the user taps anywhere outside a text field. */
+export function DismissKeyboard({ children, style }: { children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
+  return (
+    <Pressable accessible={false} onPress={Keyboard.dismiss} style={[{ flex: 1 }, style]}>
+      {children}
+    </Pressable>
   );
 }

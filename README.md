@@ -24,6 +24,7 @@ Uses Expo SDK 57 (the version the App Store Expo Go supports). Every dependency 
 ## Sign-in
 
 - **Apple**: on iPhone, *Continue with Apple* opens the real Sign in with Apple sheet (works in Expo Go). On Android and web it continues as a demo account.
+- **Email**: Sign up takes your name, email, password and confirmation; Log in takes email and password and goes straight to the Overview. Accounts are stored on this device only (no server yet), and passwords are kept only as a salted SHA-256 hash.
 - **Phone**: the code step is a demo; any 6 digits are accepted.
 - **Google**: opens Google's real account sign-in (a popup on the web, a sign-in sheet on iPhone/Android), then pre-fills your name and shows your email on Profile. It needs Google OAuth client IDs, and Google doesn't allow sign-in inside Expo Go, so it runs on the **web** and in an **installed build** (`npx expo run:ios` / `run:android` or an EAS build). Until it's set up, the button says so and continues as a demo.
 

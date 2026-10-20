@@ -23,7 +23,7 @@ export function useReduced() {
 
 export type AnimType =
   | 'rise' | 'pop' | 'float' | 'fill' | 'glow' | 'laser' | 'blink'
-  | 'sheet' | 'coin' | 'bar' | 'tick' | 'ring' | 'sheen';
+  | 'sheet' | 'coin' | 'bar' | 'tick' | 'ring' | 'ringOnce' | 'sheen';
 
 type Spec = { duration: number; easing: (t: number) => number; loop?: 'alternate' | 'restart' };
 const SPECS: Record<AnimType, Spec> = {
@@ -39,6 +39,7 @@ const SPECS: Record<AnimType, Spec> = {
   bar: { duration: 520, easing: EASE },
   tick: { duration: 520, easing: EASE },
   ring: { duration: 2400, easing: Easing.bezier(0.1, 0.6, 0.3, 1), loop: 'restart' },
+  ringOnce: { duration: 1100, easing: Easing.bezier(0.1, 0.6, 0.3, 1) }, // the splash radar: one pulse, then stops
   sheen: { duration: 3400, easing: IN_OUT, loop: 'restart' },
 };
 
@@ -101,6 +102,7 @@ export function keyframeStyle(type: AnimType, v: Animated.Value, span = 0): any 
     case 'tick':
       return { transform: [{ scale: lerp(v, [0, 0.6, 1], [0, 1.25, 1]) }] };
     case 'ring':
+    case 'ringOnce':
       return { opacity: lerp(v, [0, 0.08, 1], [0, 0.8, 0]), transform: [{ scale: lerp(v, [0, 0.08, 1], [0.85, 0.95, 2.1]) }] };
     case 'sheen':
       return { transform: [{ translateX: lerp(v, [0, 0.4, 1], [0, span, span]) }, { skewX: '-12deg' }] };

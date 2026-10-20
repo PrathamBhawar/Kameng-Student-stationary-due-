@@ -1,10 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, KeyboardAvoidingView, Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Animated, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { Anim, reducedMotion } from '../anim';
 import { AnimatedLogo, LogoMark } from '../components/Logo';
 import { Coin } from '../components/Coin';
 import { appleSignIn, GoogleAuth, googleUnavailableReason } from '../auth';
-import { Avatar, Glass, Icon, LinearBg, OwnerAvatar, PillButton, RadialBg, SheenBar, T, Tap } from '../components/ui';
+import { Avatar, DismissKeyboard, Glass, Icon, LinearBg, OwnerAvatar, PillButton, RadialBg, SheenBar, T, Tap } from '../components/ui';
+import { AppleLogo, GoogleG } from '../components/Brand';
+import { createAccount, emailOk, logIn, MIN_PASSWORD, normEmail } from '../accounts';
 import { BackBtn, Barcode, Keypad } from '../components/parts';
 import { grad } from '../theme';
 import { useLook, useStore } from '../store';
@@ -41,8 +43,9 @@ export function Splash() {
     <Pressable onPress={start} accessibilityRole="button" accessibilityLabel="Start" style={{ flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, overflow: 'hidden' }}>
       <Glow size={560} top={height / 2 - 330} />
       <View style={{ width: 196, height: 196, alignItems: 'center', justifyContent: 'center' }}>
-        <Anim type="ring" delay={1000} style={styles.ring} />
-        <Anim type="ring" delay={2200} style={styles.ring} />
+        {/* Two radar pulses as the coin lands, finished about a second after it settles. */}
+        <Anim type="ringOnce" delay={1000} style={styles.ring} />
+        <Anim type="ringOnce" delay={1250} style={styles.ring} />
         <Anim type="coin">
           <Anim type="float" delay={1800}>
             <Coin size={196} inner={154} glow={0.55} blur={110}>
@@ -360,20 +363,96 @@ export function Segmented<K extends string>({ options, value, onChange, pad = 4,
   );
 }
 
+type FieldProps = {
+  label: string; value: string; onChange: (v: string) => void; error?: string | null; secure?: boolean;
+  kind?: 'name' | 'email' | 'password' | 'newPassword'; inputRef?: React.RefObject<TextInput | null>;
+  onSubmit?: () => void; last?: boolean;
+};
+
+/** Glass text field for the onboarding screens, with an inline error and a show/hide eye for passwords. */
+function Field({ label, value, onChange, error, secure, kind, inputRef, onSubmit, last }: FieldProps) {
+  const { fs } = useLook();
+  const [shown, setShown] = useState(false);
+  const pass = kind === 'password' || kind === 'newPassword';
+  return (
+    <View style={{ gap: 6 }}>
+      <T size={14} weight={600} color="rgba(255,255,255,0.8)">{label}</T>
+      <View style={{ justifyContent: 'center' }}>
+        <TextInput
+          ref={inputRef} accessibilityLabel={label} value={value} onChangeText={onChange}
+          secureTextEntry={secure && !shown} autoCapitalize={kind === 'name' ? 'words' : 'none'} autoCorrect={false}
+          keyboardType={kind === 'email' ? 'email-address' : 'default'}
+          textContentType={kind === 'email' ? 'emailAddress' : kind === 'name' ? 'name' : kind === 'newPassword' ? 'newPassword' : pass ? 'password' : undefined}
+          autoComplete={kind === 'email' ? 'email' : kind === 'name' ? 'name' : kind === 'newPassword' ? 'new-password' : pass ? 'current-password' : undefined}
+          returnKeyType={last ? 'done' : 'next'} onSubmitEditing={onSubmit} blurOnSubmit={!!last}
+          placeholderTextColor="rgba(255,255,255,0.45)" keyboardAppearance="dark"
+          style={{
+            height: 56, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.12)', color: W,
+            fontFamily: 'Inter_500Medium', fontSize: fs(17), paddingLeft: 16, paddingRight: secure ? 52 : 16,
+            borderWidth: error ? 2 : 1, borderColor: error ? '#FFB4AB' : 'rgba(255,255,255,0.14)',
+          }} />
+        {secure ? (
+          <Tap onPress={() => setShown(!shown)} label={shown ? 'Hide password' : 'Show password'} scaleTo={0.85}
+            style={{ position: 'absolute', right: 6, width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
+            <Icon name={shown ? 'eyeOff' : 'eye'} size={20} color="rgba(255,255,255,0.75)" />
+          </Tap>
+        ) : null}
+      </View>
+      {error ? <T accessibilityRole="alert" size={13} weight={600} color="#FFB4AB">{error}</T> : null}
+    </View>
+  );
+}
+
 export function Auth() {
-  const { state, set, back, go, tab, authStart, authDone, authFail, demoSignIn } = useStore();
-  const { top, bottom, width, k } = useSafe();
+  const { state, set, back, go, tab, authStart, authDone, authFail, demoSignIn, enterApp } = useStore();
+  const { top, bottom } = useSafe();
   const signup = state.authMode === 'signup';
   const busy = state.authBusy;
-  const coinTop = (top + 114) * k;
+
+  // Email form
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [pw, setPw] = useState('');
+  const [pw2, setPw2] = useState('');
+  const [tried, setTried] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [formErr, setFormErr] = useState<string | null>(null);
+  const emailRef = useRef<TextInput>(null), pwRef = useRef<TextInput>(null), pw2Ref = useRef<TextInput>(null);
+  const errs = {
+    name: signup && name.replace(/[^A-Za-z\u0980-\u09FF]/g, '').length < 2 ? 'Enter your name' : null,
+    email: !emailOk(email) ? 'Enter a valid email, like name@gmail.com' : null,
+    pw: pw.length < (signup ? MIN_PASSWORD : 1) ? (signup ? 'Use at least ' + MIN_PASSWORD + ' characters' : 'Enter your password') : null,
+    pw2: signup && pw2 !== pw ? 'Passwords don’t match' : null,
+  };
+  const show = (k: keyof typeof errs) => (tried ? errs[k] : null);
+  const switchMode = (m: 'signup' | 'login') => { set({ authMode: m }); setTried(false); setFormErr(null); setPw(''); setPw2(''); };
+  const submit = async () => {
+    Keyboard.dismiss();
+    setTried(true); setFormErr(null);
+    if (Object.values(errs).some(Boolean) || sending) return;
+    setSending(true);
+    try {
+      if (signup) {
+        await createAccount(name, email, pw);
+        enterApp(name.trim(), { provider: 'email', name: name.trim(), email: normEmail(email) }, 'Welcome, ' + name.trim().split(/\s+/)[0]);
+      } else {
+        const n = await logIn(email, pw);
+        enterApp(n, { provider: 'email', name: n, email: normEmail(email) }, 'Welcome back, ' + n.split(/\s+/)[0]);
+      }
+    } catch (e: any) {
+      setFormErr(e?.message || 'Something went wrong. Try again.');
+    } finally {
+      setSending(false);
+    }
+  };
 
   // Google: the real OAuth popup / sheet when client IDs are set up outside Expo Go, otherwise a labelled demo.
   const googleReason = googleUnavailableReason();
-  const googlePrompt = useRef<(() => Promise<void>) | null>(null);
+  const [googlePrompt, setGooglePrompt] = useState<(() => Promise<void>) | null>(null);
   const onGoogle = () => {
-    if (googleReason || !googlePrompt.current) { demoSignIn('google', googleReason || 'Google sign-in is still loading'); return; }
+    if (googleReason || !googlePrompt) { demoSignIn('google', googleReason || 'Google sign-in is still loading'); return; }
     if (!authStart('google')) return;
-    googlePrompt.current().catch(() => authFail('Couldn’t open Google sign-in'));
+    googlePrompt().catch(() => authFail('Couldn’t open Google sign-in'));
   };
   // Apple: the native Sign in with Apple sheet on iPhone (works in Expo Go too).
   const onApple = () => {
@@ -384,61 +463,86 @@ export function Auth() {
       .catch((e) => authFail(e?.message || 'Apple sign-in failed'));
   };
 
+  const other = (label: string, icon: React.ReactNode, onPress: () => void, k: string, light?: boolean) => (
+    <Tap key={k} onPress={onPress} label={'Continue with ' + label} scaleTo={0.95} style={{ flex: 1, opacity: busy && busy !== k ? 0.5 : 1 }}>
+      {light ? (
+        <View style={{ height: 52, borderRadius: 26, backgroundColor: W, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          {icon}<T size={15} weight={600} color="#000">{busy === k ? '…' : label}</T>
+        </View>
+      ) : (
+        <Glass tint="rgba(255,255,255,0.14)" radius={26} intensity={20} style={{ height: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          {icon}<T size={15} weight={600} color={W}>{busy === k ? '…' : label}</T>
+        </Glass>
+      )}
+    </Tap>
+  );
+
   return (
-    <View style={{ flex: 1, overflow: 'hidden' }}>
+    <DismissKeyboard style={{ overflow: 'hidden' }}>
       {googleReason ? null : (
-        <GoogleAuth register={(fn) => { googlePrompt.current = fn; }} onProfile={authDone} onError={authFail} />
+        <GoogleAuth register={(fn) => setGooglePrompt(() => fn)} onProfile={authDone} onError={authFail} />
       )}
       <OnbBg />
-      <Glow size={460} top={coinTop + 88 - 230} />
-      <View style={{ position: 'absolute', top: top + 4, left: 16, right: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <BackBtn color={W} onPress={back} style={{ marginLeft: -10 }} />
-        <Glass tint="rgba(255,255,255,0.12)" radius={22} intensity={20} style={{ width: 196 }}>
-          <Segmented label="Sign up or log in" options={[['signup', 'Sign up'], ['login', 'Log in']]} value={state.authMode}
-            onChange={(m) => set({ authMode: m })} height={36} radius={18} track="transparent" thumb={W}
-            render={(_, l, on) => <T size={14} weight={700} color={on ? '#0B0F19' : 'rgba(255,255,255,0.85)'} numberOfLines={1}>{l}</T>} />
-        </Glass>
-        <View style={{ width: 34 }} />
-      </View>
+      <Glow size={420} top={top - 40} />
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+        <View style={{ paddingTop: top + 4, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <BackBtn color={W} onPress={back} style={{ marginLeft: -10 }} />
+          <Glass tint="rgba(255,255,255,0.12)" radius={22} intensity={20} style={{ width: 196 }}>
+            <Segmented label="Sign up or log in" options={[['signup', 'Sign up'], ['login', 'Log in']]} value={state.authMode}
+              onChange={switchMode} height={36} radius={18} track="transparent" thumb={W}
+              render={(_, l, on) => <T size={14} weight={700} color={on ? '#0B0F19' : 'rgba(255,255,255,0.85)'} numberOfLines={1}>{l}</T>} />
+          </Glass>
+          <View style={{ width: 34 }} />
+        </View>
 
-      <Anim type="pop" delay={120} pointerEvents="none" style={{ position: 'absolute', left: width / 2 - 88, top: coinTop }}>
-        <Anim type="float" delay={900}>
-          <Coin size={176} inner={138} glow={0.45} blur={90}>
-            <LogoMark size={78} bar="#8D94A7" dot="#8D94A7" check="#EEF0F5" />
-          </Coin>
-        </Anim>
-      </Anim>
+        <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: Math.max(bottom, 16) + 8 }}>
+          <Anim type="pop" delay={120} pointerEvents="none" style={{ alignSelf: 'center', marginTop: 18 }}>
+            <Anim type="float" delay={900}>
+              <Coin size={signup ? 96 : 120} inner={signup ? 76 : 94} glow={0.45} blur={56}>
+                <LogoMark size={signup ? 44 : 54} bar="#8D94A7" dot="#8D94A7" check="#EEF0F5" />
+              </Coin>
+            </Anim>
+          </Anim>
 
-      <View style={{ position: 'absolute', left: 16, right: 16, top: coinTop + 224 }}>
-        <Anim type="rise" delay={200} replayKey={state.authMode}>
-          <T size={32} weight={900} face="display" ls={-0.01} lh={1.02} upper center color={W} accessibilityRole="header">{signup ? 'Create account' : 'Welcome back'}</T>
-        </Anim>
-        <Anim type="rise" delay={280} replayKey={state.authMode} style={{ marginTop: 10 }}>
-          <T size={17} color={W78} center>{signup ? 'Choose how to sign up.' : 'Choose how to log in.'}</T>
-        </Anim>
-      </View>
+          <Anim type="rise" delay={160} replayKey={state.authMode} style={{ marginTop: signup ? 22 : 30 }}>
+            <T size={32} weight={900} face="display" ls={-0.01} lh={1.02} upper center color={W} accessibilityRole="header">{signup ? 'Create account' : 'Welcome back'}</T>
+          </Anim>
+          <Anim type="rise" delay={220} replayKey={state.authMode} style={{ marginTop: 8 }}>
+            <T size={16} color={W78} center>{signup ? 'Sign up with your email.' : 'Log in with your email.'}</T>
+          </Anim>
 
-      <View style={{ position: 'absolute', left: 16, right: 16, bottom: Math.max(bottom - 4, 16), gap: 10 }}>
-        <Anim type="rise" delay={320} replayKey={state.authMode} style={{ opacity: busy && busy !== 'apple' ? 0.5 : 1 }}>
-          <PillButton title={busy === 'apple' ? 'Connecting…' : 'Continue with Apple'} onPress={onApple} bg={W} fg="#000" />
-        </Anim>
-        <Anim type="rise" delay={380} replayKey={state.authMode} style={{ opacity: busy && busy !== 'google' ? 0.5 : 1 }}>
-          <Tap onPress={onGoogle} label="Continue with Google">
-            <Glass tint="rgba(255,255,255,0.14)" radius={28} intensity={20} style={{ height: 56, alignItems: 'center', justifyContent: 'center' }}>
-              <T size={17} weight={600} color={W}>{busy === 'google' ? 'Connecting…' : 'Continue with Google'}</T>
-            </Glass>
+          <Anim type="rise" delay={280} replayKey={state.authMode} style={{ marginTop: 22, gap: 12 }}>
+            {signup ? <Field label="Full name" kind="name" value={name} onChange={setName} error={show('name')} onSubmit={() => emailRef.current?.focus()} /> : null}
+            <Field label="Email" kind="email" value={email} onChange={(v) => setEmail(v.trim())} error={show('email')} inputRef={emailRef} onSubmit={() => pwRef.current?.focus()} />
+            <Field label="Password" kind={signup ? 'newPassword' : 'password'} secure value={pw} onChange={setPw} error={show('pw')} inputRef={pwRef}
+              last={!signup} onSubmit={signup ? () => pw2Ref.current?.focus() : submit} />
+            {signup ? <Field label="Confirm password" kind="newPassword" secure value={pw2} onChange={setPw2} error={show('pw2')} inputRef={pw2Ref} last onSubmit={submit} /> : null}
+            {formErr ? (
+              <View accessibilityRole="alert" style={{ paddingVertical: 10, paddingHorizontal: 14, borderRadius: 14, backgroundColor: 'rgba(255,128,118,0.16)' }}>
+                <T size={14} weight={600} color="#FFB4AB">{formErr}</T>
+              </View>
+            ) : null}
+            <PillButton title={sending ? (signup ? 'Creating account…' : 'Logging in…') : (signup ? 'Create account' : 'Log in')}
+              onPress={submit} bg={W} fg="#0B0F19" style={{ marginTop: 4, opacity: sending ? 0.7 : 1 }} />
+          </Anim>
+
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 22 }}>
+            <View style={{ flex: 1, height: 1, backgroundColor: 'rgba(255,255,255,0.16)' }} />
+            <T size={13} weight={600} color="rgba(255,255,255,0.6)">or continue with</T>
+            <View style={{ flex: 1, height: 1, backgroundColor: 'rgba(255,255,255,0.16)' }} />
+          </View>
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 14 }}>
+            {other('Apple', <AppleLogo size={18} color="#000" />, onApple, 'apple', true)}
+            {other('Google', <GoogleG size={18} />, onGoogle, 'google')}
+            {other('Phone', <Icon name="device" size={18} color={W} />, () => { if (!busy) go('signin'); }, 'phone')}
+          </View>
+          <Tap onPress={() => { set({ onboarded: true, account: { provider: 'demo', name: '', email: '' } }); tab('overview'); }} label="Try demo" style={{ marginTop: 12, padding: 8, alignItems: 'center' }}>
+            <T size={15} weight={600} color="rgba(255,255,255,0.85)">Try demo</T>
           </Tap>
-        </Anim>
-        <Anim type="rise" delay={440} replayKey={state.authMode}>
-          <PillButton title="Continue with phone" onPress={() => { if (!busy) go('signin'); }} bg="#1A1B22" fg={W}>
-            <Icon name="device" size={20} color={W} />
-          </PillButton>
-        </Anim>
-        <Tap onPress={() => { set({ onboarded: true, account: { provider: 'demo', name: '', email: '' } }); tab('overview'); }} label="Try demo" style={{ marginTop: 4, padding: 8, alignItems: 'center' }}>
-          <T size={15} weight={600} color="rgba(255,255,255,0.85)">Try demo</T>
-        </Tap>
-      </View>
-    </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </DismissKeyboard>
   );
 }
 
@@ -453,7 +557,8 @@ export function SignIn() {
   const ok = digits.length === 10;
   const err = digits.length > 0 && !ok;
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+    <DismissKeyboard>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
       <OnbBg />
       <View style={{ flex: 1, paddingTop: top + 4, paddingHorizontal: 16, paddingBottom: Math.max(bottom, 16) }}>
         <BackBtn color={W} onPress={back} style={{ marginLeft: -10 }} />
@@ -474,15 +579,22 @@ export function SignIn() {
         <PillButton title="Send code" disabled={!ok} onPress={() => ok && go('otp', { code: '' })}
           bg={ok ? W : 'rgba(255,255,255,0.2)'} fg={ok ? '#0B0F19' : 'rgba(255,255,255,0.6)'} />
       </View>
-    </KeyboardAvoidingView>
+  </KeyboardAvoidingView>
+    </DismissKeyboard>
   );
 }
 
 // ───────────────────────── 06b Enter code
 export function Otp() {
-  const { state, back, go, toast, set } = useStore();
+  const { state, back, go, toast, set, enterApp } = useStore();
   const { top, bottom } = useSafe();
   const code = state.code;
+  const verify = () => {
+    if (code.length !== 6) return;
+    const account = { provider: 'phone' as const, name: '', email: '+91 ' + state.phone };
+    if (state.authMode === 'login') enterApp(state.ownerName, account, 'Welcome back, ' + state.ownerName.trim().split(/\s+/)[0]);
+    else go('name', { nameDraft: '', account });
+  };
   const ok = code.length === 6;
   const [left, setLeft] = useState(24);
   useEffect(() => {
@@ -507,7 +619,7 @@ export function Otp() {
         </Tap>
       )}
       <View style={{ flex: 1 }} />
-      <PillButton title="Verify" disabled={!ok} onPress={() => ok && go('name', { nameDraft: '', account: { provider: 'phone', name: '', email: '+91 ' + state.phone } })} style={{ marginBottom: 12 }}
+      <PillButton title="Verify" disabled={!ok} onPress={verify} style={{ marginBottom: 12 }}
         bg={ok ? W : 'rgba(255,255,255,0.2)'} fg={ok ? '#0B0F19' : 'rgba(255,255,255,0.6)'} />
       <Keypad kind="otp" />
     </View>
@@ -543,7 +655,8 @@ export function Name() {
     toast('Welcome, ' + draft.split(/\s+/)[0]);
   };
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+    <DismissKeyboard>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
       <OnbBg />
       <View style={{ flex: 1, paddingTop: top + 4, paddingHorizontal: 16, paddingBottom: Math.max(bottom, 16), overflow: 'hidden' }}>
         <Glow size={440} top={top + 52} />
@@ -564,7 +677,8 @@ export function Name() {
         <View style={{ flex: 1 }} />
         <PillButton title="Continue" disabled={!ok} onPress={done} bg={ok ? W : 'rgba(255,255,255,0.2)'} fg={ok ? '#0B0F19' : 'rgba(255,255,255,0.6)'} />
       </View>
-    </KeyboardAvoidingView>
+  </KeyboardAvoidingView>
+    </DismissKeyboard>
   );
 }
 

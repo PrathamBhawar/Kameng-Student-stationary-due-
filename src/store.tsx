@@ -15,7 +15,7 @@ export type ScanState = 'ready' | 'reading' | 'invalid' | 'denied' | 'unavailabl
 export type ThemeKey = 'light' | 'dark' | 'system';
 export type Filter = 'all' | 'pending' | 'overdue' | 'settled';
 /** Who is signed in, and how. `email` holds the phone number for phone sign-in. */
-export type Account = { provider: 'google' | 'apple' | 'phone' | 'demo'; name: string; email: string };
+export type Account = { provider: 'email' | 'google' | 'apple' | 'phone' | 'demo'; name: string; email: string };
 
 export type State = {
   stack: Screen[]; dir: 1 | -1;
@@ -128,10 +128,26 @@ function useStoreValue() {
       set({ authBusy: k });
       return true;
     };
-    /** A real sign-in finished: remember the account and pre-fill the name step. */
-    const authDone = (a: Account) => {
+    /** Signed in: go straight to the Overview. */
+    const enterApp = (name: string, a: Account, msg: string) => {
       tapSuccess();
-      set((s) => ({ authBusy: '', account: a, stack: s.stack.concat(['name']), dir: 1, nameDraft: a.name }));
+      set({ authBusy: '', account: a, ownerName: name, onboarded: true, stack: ['overview'], dir: 1 });
+      toast(msg);
+    };
+    /**
+     * A sign-in finished. Log in goes straight to the Overview; sign up asks for a name only when
+     * the account didn't come with one.
+     */
+    const authDone = (a: Account) => {
+      const st = ref.current;
+      const name = a.name.trim();
+      if (st.authMode === 'login' || name) {
+        const n = name || st.ownerName;
+        enterApp(n, a, (st.authMode === 'login' ? 'Welcome back, ' : 'Welcome, ') + firstName(n));
+        return;
+      }
+      tapSuccess();
+      set((s) => ({ authBusy: '', account: a, stack: s.stack.concat(['name']), dir: 1, nameDraft: '' }));
       toast(a.email ? 'Signed in as ' + a.email : 'Signed in with ' + (a.provider === 'apple' ? 'Apple' : 'Google'));
     };
     /** Sign-in failed or was cancelled (message null). */
@@ -143,7 +159,9 @@ function useStoreValue() {
     const demoSignIn = (k: 'apple' | 'google', reason: string) => {
       if (!authStart(k)) return;
       later(() => {
-        set((s) => ({ authBusy: '', account: { provider: 'demo', name: '', email: '' }, stack: s.stack.concat(['name']), dir: 1, nameDraft: '' }));
+        const demo: Account = { provider: 'demo', name: '', email: '' };
+        if (ref.current.authMode === 'login') { enterApp(ref.current.ownerName, demo, reason + ' · demo'); return; }
+        set((s) => ({ authBusy: '', account: demo, stack: s.stack.concat(['name']), dir: 1, nameDraft: '' }));
         toast(reason + ' · demo', true);
       }, 900);
     };
@@ -200,7 +218,7 @@ function useStoreValue() {
       tapWarn();
       set({ scanState: 'unavailable', scannedId: id });
     };
-    return { set, go, back, tab, toast, find, landOnStudent, authStart, authDone, authFail, demoSignIn, addTx, press, openRemind, closeRemind, resetDemo, signOut, startScanRead, handleScan, later };
+    return { set, go, back, tab, toast, find, landOnStudent, authStart, authDone, authFail, demoSignIn, enterApp, addTx, press, openRemind, closeRemind, resetDemo, signOut, startScanRead, handleScan, later };
   }, [set, later]);
 
   return { state, ready, ...actions };

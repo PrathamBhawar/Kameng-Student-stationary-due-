@@ -1,13 +1,20 @@
 {
   "expo": {
-    "name": "student-dues",
+    "name": "Student Dues",
     "slug": "student-dues",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": false,
+      "bundleIdentifier": "com.studentdues.app",
+      "infoPlist": {
+        "LSApplicationQueriesSchemes": [
+          "whatsapp",
+          "tel"
+        ]
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -20,6 +27,21 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-font",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Student Dues to scan student ID barcodes.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ]
+    ],
+    "backgroundColor": "#000000",
+    "splash": {
+      "backgroundColor": "#000000"
     }
   }
 }

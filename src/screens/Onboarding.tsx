@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Animated, Keyboard, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { Anim, reducedMotion } from '../anim';
 import { AnimatedLogo, LogoMark } from '../components/Logo';
 import { Coin, CoinHalo } from '../components/Coin';
+import { SlideToStart } from '../components/SlideToStart';
 import { appleSignIn, GoogleAuth, googleUnavailableReason } from '../auth';
 import { Avatar, DismissKeyboard, Glass, Icon, LinearBg, OwnerAvatar, PillButton, RadialBg, SheenBar, T, Tap } from '../components/ui';
 import { AppleLogo, GoogleG } from '../components/Brand';
@@ -37,10 +38,10 @@ export function Glow({ size, top, left, h, stops = grad.glow }: { size: number; 
 // ───────────────────────── 01 Splash
 export function Splash() {
   const { state, go, tab } = useStore();
-  const { height } = useSafe();
+  const { height, width, bottom } = useSafe();
   const start = () => (state.onboarded ? tab('overview') : go('intro1'));
   return (
-    <Pressable onPress={start} accessibilityRole="button" accessibilityLabel="Start" style={{ flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, overflow: 'hidden' }}>
+    <View style={{ flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, overflow: 'hidden' }}>
       <Glow size={560} top={height / 2 - 330} />
       <View style={{ width: 196, height: 196, alignItems: 'center', justifyContent: 'center' }}>
         {/* Two radar pulses as the coin lands, finished about a second after it settles. */}
@@ -69,10 +70,10 @@ export function Splash() {
       <Anim type="rise" delay={1300} style={{ marginTop: 8 }}>
         <T size={18} color={W78}>Student dues, organised.</T>
       </Anim>
-      <Anim type="rise" delay={1900} style={{ position: 'absolute', bottom: 64, left: 0, right: 0 }}>
-        <T size={14} weight={600} color="rgba(255,255,255,0.6)" center>Tap to start</T>
+      <Anim type="rise" delay={1900} style={{ position: 'absolute', bottom: Math.max(bottom, 16) + 24, left: 0, right: 0, alignItems: 'center' }}>
+        <SlideToStart label="Slide to start" width={Math.min(width - 48, 340)} onDone={start} />
       </Anim>
-    </Pressable>
+    </View>
   );
 }
 

@@ -3,7 +3,7 @@ import { Animated, KeyboardAvoidingView, Platform, ScrollView, TextInput, View }
 import { Anim, reducedMotion } from '../anim';
 import { Avatar, DismissKeyboard, Icon, LinearBg, PillButton, RadialBg, T, Tap } from '../components/ui';
 import { BackBtn, Keypad } from '../components/parts';
-import { bal, fmt, HOSTELS, initials, prettyPhone, rs } from '../data';
+import { bal, fmt, HOSTELS, initials, prettyPhone, rs, isVisitor, placeOf } from '../data';
 import { grad } from '../theme';
 import { tapLight, tapWarn, useLook, useStore } from '../store';
 import { useSafe } from '../safe';
@@ -47,7 +47,7 @@ export function StudentDetail() {
             <Avatar ini={initials(s.name)} size={76} bg="rgba(255,255,255,0.2)" fg="#FFFFFF" fontSize={26} face="display" weight={800} ring="rgba(255,255,255,0.35)" />
           </Anim>
           <T size={28} weight={800} face="display" ls={-0.02} color="#FFFFFF" center style={{ marginTop: 12 }} accessibilityRole="header">{s.name}</T>
-          <T size={15} color="rgba(255,255,255,0.8)" center style={{ marginTop: 4 }}>{s.id} · {s.hostel} · {s.room}</T>
+          <T size={15} color="rgba(255,255,255,0.8)" center style={{ marginTop: 4 }}>{isVisitor(s) ? placeOf(s) + ' · ' + prettyPhone(s.phone) : s.id + ' · ' + placeOf(s)}</T>
           <Anim type="pop" delay={120} style={{ marginTop: 18 }}>
             <T size={56} weight={800} face="display" ls={-0.04} lh={1.1} color="#FFFFFF">{rs(b)}</T>
           </Anim>

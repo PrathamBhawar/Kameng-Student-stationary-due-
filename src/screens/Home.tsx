@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Animated, LayoutAnimation, PanResponder, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { Anim, reducedMotion } from '../anim';
 import { Avatar, Glass, Icon, LinearBg, OwnerAvatar, RadialBg, T, Tap } from '../components/ui';
-import { bal, initials, rs, status, Student, DEMO_ID } from '../data';
+import { bal, initials, rs, status, Student, DEMO_ID, placeOf } from '../data';
 import { grad, sizes } from '../theme';
 import { Filter, firstName, tapLight, useLook, useStore } from '../store';
 import { useSafe } from '../safe';
@@ -110,7 +110,8 @@ export function Students() {
   const { top } = useSafe();
   const look = useStatusLook();
   const q = state.q.trim().toLowerCase();
-  const byQ = state.students.filter((s) => !q || s.name.toLowerCase().includes(q) || s.id.includes(q) || s.room.toLowerCase().includes(q));
+  const byQ = state.students.filter((s) => !q || s.name.toLowerCase().includes(q) || s.id.toLowerCase().includes(q) || s.room.toLowerCase().includes(q)
+    || (s.city || '').toLowerCase().includes(q) || s.phone.includes(q));
   const order = { overdue: 0, pending: 1, settled: 2 };
   const rows = byQ.filter((s) => state.f === 'all' || status(s) === state.f)
     .sort((a, b) => (order[status(a)] - order[status(b)]) || (b.since - a.since));
@@ -153,7 +154,7 @@ export function Students() {
                 <Avatar ini={initials(s.name)} size={46} bg={L.avBg} fg={L.avFg} fontSize={16} />
                 <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
                   <T size={17} weight={600} numberOfLines={1}>{s.name}</T>
-                  <T size={14} color={c.text2} numberOfLines={1}>{s.hostel} · {s.room}</T>
+                  <T size={14} color={c.text2} numberOfLines={1}>{placeOf(s)}</T>
                 </View>
                 <View style={{ alignItems: 'flex-end', gap: 4 }}>
                   <T size={18} weight={700} face="display" color={b > 0 ? c.text : c.text2}>{rs(b)}</T>

@@ -21,10 +21,9 @@ const ScanBg = ({ cy = '36%' }: { cy?: string }) => (
 const roundRect = (x: number, y: number, w: number, h: number, r: number) =>
   `M${x + r} ${y}H${x + w - r}A${r} ${r} 0 0 1 ${x + w} ${y + r}V${y + h - r}A${r} ${r} 0 0 1 ${x + w - r} ${y + h}H${x + r}A${r} ${r} 0 0 1 ${x} ${y + h - r}V${y + r}A${r} ${r} 0 0 1 ${x + r} ${y}Z`;
 
-const ERRS: Record<'invalid' | 'denied' | 'unavailable', [string, string, string]> = {
+const ERRS: Record<'invalid' | 'denied', [string, string, string]> = {
   invalid: ['Can’t read', 'Hold steady, try again.', 'Try again'],
   denied: ['Camera off', 'Allow camera in Settings.', 'Open Settings'],
-  unavailable: ['Not found', 'No details for this ID.', 'Add student'],
 };
 
 // ───────────────────────── 10 Scan ID / 12 ID not found
@@ -57,13 +56,14 @@ export function Scan() {
       if (perm && !perm.granted && perm.canAskAgain) requestPerm().then((r) => r.granted && set({ scanState: 'ready' }));
       else Linking.openSettings().catch(() => {});
     }
-    else go('newStudent', { scanState: 'ready', ns: { name: '', room: '', phone: '', hostel: state.shopHostel }, nsTouched: false, nsIdEditable: false });
   };
   /** Unreadable barcode: type the ID from the card instead. */
   const enterIdManually = () =>
     go('newStudent', { scanState: 'ready', scannedId: '', ns: { name: '', room: '', phone: '', hostel: state.shopHostel }, nsTouched: false, nsIdEditable: true });
   const er = !live ? ERRS[ss as keyof typeof ERRS] : null;
-  const demo: [string, ScanState | 'ok'][] = [['Success', 'ok'], ['Unreadable', 'invalid'], ['Not found', 'unavailable'], ['No camera', 'denied']];
+  // Demo IDs: a saved student, and an ID nobody has saved yet.
+  const newDemoId = () => { let n = Number(NEW_ID); while (state.students.some((x) => x.id === String(n))) n += 1; return String(n); };
+  const demo: [string, ScanState | 'known' | 'new'][] = [['Saved student', 'known'], ['New ID', 'new'], ['Unreadable', 'invalid'], ['No camera', 'denied']];
 
   return (
     <View style={{ flex: 1 }}>
@@ -137,15 +137,25 @@ export function Scan() {
           <T size={13} weight={700} color={c.text2} style={{ marginRight: 2 }}>Demo</T>
           {demo.map(([label, kk]) => (
             <Tap key={label} label={'Demo: ' + label} scaleTo={0.94}
-              onPress={() => { if (kk === 'ok') { if (state.scanState !== 'reading') startScanRead(); } else { tapLight(); set({ scanState: kk, scannedId: NEW_ID }); } }}
+              onPress={() => {
+                if (state.scanState === 'reading') return;
+                if (kk === 'known') startScanRead();
+                else if (kk === 'new') startScanRead(newDemoId());
+                else { tapLight(); set({ scanState: kk }); }
+              }}
               style={{ height: 34, paddingHorizontal: 12, borderRadius: 17, backgroundColor: c.surface, justifyContent: 'center' }}>
               <T size={13} weight={600}>{label}</T>
             </Tap>
           ))}
         </ScrollView>
-        <PillButton title="Search instead" onPress={() => tab('students')} bg={c.surface} fg={c.text} height={54}>
-          <Icon name="search" size={22} color={c.text} />
-        </PillButton>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <PillButton title="Search" onPress={() => tab('students')} bg={c.surface} fg={c.text} height={54} style={{ flex: 1 }} label="Search students instead">
+            <Icon name="search" size={20} color={c.text} />
+          </PillButton>
+          <PillButton title="Visitor" onPress={() => go('visitor')} bg={c.surface} fg={c.text} height={54} style={{ flex: 1 }} label="Add a visitor with no ID">
+            <Icon name="profile" size={20} color={c.text} />
+          </PillButton>
+        </View>
       </Anim>
     </View>
   );
@@ -288,7 +298,11 @@ export function NewStudent() {
             </View>
           </Anim>
         </ScrollView>
-        <PillButton title="Save & add due" disabled={!ok} onPress={save} bg={ok ? c.primary : c.disBg} fg={ok ? '#FFFFFF' : c.disFg} style={{ marginTop: 12 }} />
+        {already ? (
+          <PillButton title={'Open ' + already.name.split(' ')[0] + '’s profile'} onPress={() => landOnStudent(already.id, '')} bg={c.primary} fg="#FFFFFF" style={{ marginTop: 12 }} />
+        ) : (
+          <PillButton title="Save & add due" disabled={!ok} onPress={save} bg={ok ? c.primary : c.disBg} fg={ok ? '#FFFFFF' : c.disFg} style={{ marginTop: 12 }} />
+        )}
       </View>
     </KeyboardAvoidingView>
     </DismissKeyboard>

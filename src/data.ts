@@ -6,6 +6,9 @@ export type Student = {
   id: string; name: string; hostel: string; room: string; phone: string;
   since: number; // days the oldest unpaid due has been open
   tx: Tx[];
+  /** 'visitor': someone from off campus with no ID card. They have a city instead of a hostel and room. */
+  kind?: 'student' | 'visitor';
+  city?: string;
 };
 
 export type Status = 'overdue' | 'pending' | 'settled';
@@ -53,4 +56,9 @@ const groupIN = (n: number) => {
 export const fmt = (v: number) => (v < 0 ? '-' : '') + groupIN(v);
 export const rs = (v: number) => '₹' + fmt(v);
 export const initials = (n: string) => n.trim().split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
+export const isVisitor = (s: Student) => s.kind === 'visitor';
+/** Where someone is from, as shown under their name: "Kameng · B-214" or "Visitor · Shillong". */
+export const placeOf = (s: Student) => (isVisitor(s) ? 'Visitor · ' + (s.city || '') : s.hostel + ' · ' + s.room);
+/** A visitor has no campus ID, so make a unique one for the ledger. */
+export const visitorId = () => 'V' + Date.now().toString(36).toUpperCase();
 export const prettyPhone = (p: string) => (p ? '+91 ' + p.slice(0, 5) + ' ' + p.slice(5) : 'Not on ID');

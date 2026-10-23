@@ -8,10 +8,10 @@ import { Lang, strings, Strings } from './i18n';
 
 export type Screen =
   | 'splash' | 'intro1' | 'intro2' | 'lang' | 'auth' | 'signin' | 'otp' | 'name'
-  | 'hostel' | 'overview' | 'students' | 'profile' | 'scan' | 'verify' | 'newStudent'
+  | 'hostel' | 'overview' | 'students' | 'profile' | 'scan' | 'verify' | 'newStudent' | 'visitor'
   | 'student' | 'pay' | 'addDue' | 'edit';
 
-export type ScanState = 'ready' | 'reading' | 'invalid' | 'denied' | 'unavailable';
+export type ScanState = 'ready' | 'reading' | 'invalid' | 'denied';
 export type ThemeKey = 'light' | 'dark' | 'system';
 export type Filter = 'all' | 'pending' | 'overdue' | 'settled';
 /** Who is signed in, and how. `email` holds the phone number for phone sign-in. */
@@ -49,7 +49,7 @@ const initial = (): State => ({
 });
 
 const KEY = 'studentDues.v1';
-const TRANSIENT: Screen[] = ['scan', 'verify', 'newStudent', 'addDue', 'pay', 'edit'];
+const TRANSIENT: Screen[] = ['scan', 'verify', 'newStudent', 'visitor', 'addDue', 'pay', 'edit'];
 
 export const tapLight = () => { Haptics.selectionAsync().catch(() => {}); };
 export const tapMedium = () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); };
@@ -204,24 +204,31 @@ function useStoreValue() {
     const resetDemo = () => set({ students: seed(), stack: ['splash'], dir: -1, q: '', f: 'all', onboarded: false });
     const signOut = () => set({ stack: ['auth'], dir: -1, authMode: 'login', code: '', onboarded: false, account: null });
     /** Shows "Reading…" briefly, then opens Student found for `id`. */
+    /** A student ID only (from the barcode or typed): someone we know opens their profile, a new ID the New student form. */
+    const openId = (id: string) => {
+      const known = ref.current.students.find((s) => s.id === id);
+      if (known) { tapSuccess(); landOnStudent(known.id, known.name + ' · ₹' + fmt(bal(known)) + ' due'); return; }
+      tapWarn();
+      go('newStudent', { scanState: 'ready', scannedId: id, nsIdEditable: false, nsTouched: false, ns: { name: '', room: '', phone: '', hostel: ref.current.shopHostel } });
+      toast('New ID · add their details');
+    };
+    /** Shows "Reading…" briefly, as a real barcode read does, then opens the ID. */
     const startScanRead = (id: string = DEMO_ID) => {
       tapMedium();
       set({ scanState: 'reading' });
       later(() => {
         set({ scanState: 'ready' });
-        if (top() === 'scan') { tapSuccess(); go('verify', { sel: id }); }
+        if (top() === 'scan') openId(id);
       }, 900);
     };
-    /** Handles a barcode read by the camera: known ID → Student found, unknown → Not found, junk → Can't read. */
+    /** Handles a barcode read by the camera. The barcode carries only the student ID. */
     const handleScan = (data: string) => {
       if (ref.current.scanState !== 'ready' || top() !== 'scan') return;
       const id = (data || '').replace(/\D/g, '');
       if (id.length < 6 || id.length > 12) { tapWarn(); set({ scanState: 'invalid' }); return; }
-      if (ref.current.students.some((s) => s.id === id)) { startScanRead(id); return; }
-      tapWarn();
-      set({ scanState: 'unavailable', scannedId: id });
+      startScanRead(id);
     };
-    return { set, go, back, tab, toast, find, landOnStudent, authStart, authDone, authFail, demoSignIn, enterApp, addTx, press, openRemind, closeRemind, resetDemo, signOut, startScanRead, handleScan, later };
+    return { set, go, back, tab, toast, find, landOnStudent, authStart, authDone, authFail, demoSignIn, enterApp, addTx, press, openRemind, closeRemind, resetDemo, signOut, startScanRead, handleScan, openId, later };
   }, [set, later]);
 
   return { state, ready, ...actions };

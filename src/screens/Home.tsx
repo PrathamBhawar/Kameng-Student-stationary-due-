@@ -2,19 +2,22 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Animated, LayoutAnimation, PanResponder, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { Anim, reducedMotion } from '../anim';
 import { Avatar, Glass, Icon, LinearBg, OwnerAvatar, RadialBg, T, Tap } from '../components/ui';
-import { bal, initials, rs, status, Student, DEMO_ID, placeOf } from '../data';
+import { initials, rs, Student, DEMO_ID, placeOf } from '../data';
+import { balance, openDisputes, Summary, unsentReceipts } from '../ledger/balance';
 import { grad, sizes } from '../theme';
-import { Filter, firstName, tapLight, useLook, useStore } from '../store';
+import { Filter, firstName, tapLight, useLook, useStore, useSummaries } from '../store';
 import { useSafe } from '../safe';
 import { Segmented } from './Onboarding';
 
 const smooth = () => { if (!reducedMotion()) LayoutAnimation.configureNext(LayoutAnimation.create(260, 'easeInEaseOut', 'opacity')); };
 
+/** Chip, avatar and dot colours for a student's status, worked out from the ledger summary. */
 export function useStatusLook() {
   const { c, t } = useLook();
-  return (s: Student) => {
-    const k = status(s);
-    if (k === 'overdue') return { k, chip: t.overdue + ' · ' + s.since + 'd', chipBg: c.redSoft, chipFg: c.red, avBg: c.redSoft, avFg: c.red, dot: '#FF8F86' };
+  return (_s: Student, sm?: Summary) => {
+    const k = sm?.status ?? 'settled';
+    if (k === 'overdue') return { k, chip: t.overdue + ' · ' + (sm?.days ?? 0) + 'd', chipBg: c.redSoft, chipFg: c.red, avBg: c.redSoft, avFg: c.red, dot: '#FF8F86' };
+    if (k === 'disputed') return { k, chip: t.inDisputeStatus, chipBg: c.amberSoft, chipFg: c.amber, avBg: c.amberSoft, avFg: c.amber, dot: '#F7C26B' };
     if (k === 'pending') return { k, chip: t.pending, chipBg: c.amberSoft, chipFg: c.amber, avBg: c.amberSoft, avFg: c.amber, dot: '#F7C26B' };
     return { k, chip: t.settled, chipBg: c.greenSoft, chipFg: c.green, avBg: c.greenSoft, avFg: c.green, dot: '#5FE091' };
   };
@@ -22,24 +25,29 @@ export function useStatusLook() {
 
 // ───────────────────────── 07 Overview
 export function Overview() {
-  const { state, set, tab } = useStore();
+  const { state, set, tab, go } = useStore();
   const { t, lang } = useLook();
   const { top, width } = useSafe();
-  const owing = state.students.filter((s) => bal(s) > 0);
-  const od = owing.filter((s) => status(s) === 'overdue');
-  const pd = owing.filter((s) => status(s) === 'pending');
-  const sum = (a: Student[]) => a.reduce((x, s) => x + bal(s), 0);
+  const sm = useSummaries();
+  const owing = state.students.filter((s) => sm[s.id]?.balance > 0);
+  const od = owing.filter((s) => sm[s.id].status === 'overdue');
+  const pd = owing.filter((s) => sm[s.id].status === 'pending');
+  const sumBal = (a: Student[]) => a.reduce((x, s) => x + sm[s.id].balance, 0);
+  // Pending and overdue ask only for what isn't in dispute.
+  const sum = (a: Student[]) => a.reduce((x, s) => x + Math.max(sm[s.id].undisputed, 0), 0);
+  const unsent = unsentReceipts(state.entries).length;
+  const disputes = openDisputes(state.entries).length;
   const goList = (f: Filter) => set({ stack: ['students'], dir: 1, f, q: '' });
   const owner = (state.ownerName || 'S').trim()[0]?.toUpperCase() || 'S';
-  const row = (icon: 'clock' | 'warn', tint: string, fg: string, title: string, sub: string, amt: string, amtFg: string, f: Filter) => (
-    <Tap onPress={() => goList(f)} label={title + ', ' + amt} scaleTo={0.98}
+  const row = (icon: 'clock' | 'warn' | 'alert', tint: string, fg: string, title: string, sub: string, amt: string, amtFg: string, f: Filter | (() => void)) => (
+    <Tap onPress={() => (typeof f === 'function' ? f() : goList(f))} label={title + ', ' + amt} scaleTo={0.98}
       style={{ flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16, minHeight: 80 }}>
       <View style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: tint, alignItems: 'center', justifyContent: 'center' }}>
         <Icon name={icon} size={24} color={fg} />
       </View>
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
         <T size={17} weight={600} color="#FFFFFF">{title}</T>
-        <T size={14} weight={f === 'overdue' ? 600 : 400} color={f === 'overdue' ? '#FF9A91' : 'rgba(255,255,255,0.65)'}>{sub}</T>
+        {sub ? <T size={14} weight={f === 'overdue' ? 600 : 400} color={f === 'overdue' ? '#FF9A91' : 'rgba(255,255,255,0.65)'}>{sub}</T> : null}
       </View>
       <T size={22} weight={800} face="display" color={amtFg}>{amt}</T>
       <Icon name="chevron" size={20} color="rgba(255,255,255,0.5)" />
@@ -59,7 +67,7 @@ export function Overview() {
         <View style={{ alignItems: 'center', marginTop: 92 }}>
           <Anim type="rise" delay={60}><T size={16} weight={500} color="rgba(255,255,255,0.85)">{t.total}</T></Anim>
           <Anim type="pop" delay={120} style={{ marginTop: 6 }}>
-            <CountUp value={sum(owing)} size={60} />
+            <CountUp value={sumBal(owing)} size={60} />
           </Anim>
           <Anim type="rise" delay={220} style={{ marginTop: 14 }}>
             <Tap onPress={() => goList('all')} label="Show students who owe">
@@ -74,6 +82,18 @@ export function Overview() {
             {row('clock', 'rgba(243,179,83,0.18)', '#F3B353', t.pending, t.n(pd.length), rs(sum(pd)), '#FFFFFF', 'pending')}
             <View style={{ height: 1, backgroundColor: 'rgba(255,255,255,0.08)', marginLeft: 76 }} />
             {row('warn', 'rgba(255,128,118,0.18)', '#FF8F86', t.overdue, t.n(od.length), rs(sum(od)), '#FF9A91', 'overdue')}
+            {unsent > 0 ? (
+              <>
+                <View style={{ height: 1, backgroundColor: 'rgba(255,255,255,0.08)', marginLeft: 76 }} />
+                {row('alert', 'rgba(243,179,83,0.18)', '#F3B353', t.receiptsNotSent, '', String(unsent), '#FFFFFF', () => go('receipts'))}
+              </>
+            ) : null}
+            {disputes > 0 ? (
+              <>
+                <View style={{ height: 1, backgroundColor: 'rgba(255,255,255,0.08)', marginLeft: 76 }} />
+                {row('alert', 'rgba(243,179,83,0.18)', '#F3B353', t.disputes, '', String(disputes), '#F3B353', () => go('disputes'))}
+              </>
+            ) : null}
           </Glass>
         </Anim>
         <T size={13} color="rgba(255,255,255,0.55)" center style={{ marginTop: 16 }}>{lang === 'as' ? 'নমুনা তথ্য' : 'Sample data'}</T>
@@ -109,12 +129,14 @@ export function Students() {
   const { c, t, fs } = useLook();
   const { top } = useSafe();
   const look = useStatusLook();
+  const sm = useSummaries();
   const q = state.q.trim().toLowerCase();
   const byQ = state.students.filter((s) => !q || s.name.toLowerCase().includes(q) || s.id.toLowerCase().includes(q) || s.room.toLowerCase().includes(q)
     || (s.city || '').toLowerCase().includes(q) || s.phone.includes(q));
-  const order = { overdue: 0, pending: 1, settled: 2 };
-  const rows = byQ.filter((s) => state.f === 'all' || status(s) === state.f)
-    .sort((a, b) => (order[status(a)] - order[status(b)]) || (b.since - a.since));
+  const order = { overdue: 0, pending: 1, disputed: 2, settled: 3 };
+  const st = (s: Student) => sm[s.id]?.status ?? 'settled';
+  const rows = byQ.filter((s) => state.f === 'all' || st(s) === state.f)
+    .sort((a, b) => (order[st(a)] - order[st(b)]) || ((sm[b.id]?.days ?? 0) - (sm[a.id]?.days ?? 0)));
   const chips: [Filter, string][] = [['all', t.all], ['pending', t.pending], ['overdue', t.overdue], ['settled', t.settled]];
   return (
     <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" showsVerticalScrollIndicator={false}
@@ -135,7 +157,7 @@ export function Students() {
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 12, marginHorizontal: -16 }} contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}>
         {chips.map(([k, label]) => {
           const on = state.f === k;
-          const n = byQ.filter((s) => k === 'all' || status(s) === k).length;
+          const n = byQ.filter((s) => k === 'all' || st(s) === k).length;
           return (
             <Tap key={k} onPress={() => { tapLight(); smooth(); set({ f: k }); }} accessibilityRole="tab" accessibilityState={{ selected: on }} label={label + ' ' + n}
               style={{ height: 40, paddingHorizontal: 16, borderRadius: 20, backgroundColor: on ? c.text : c.surface, justifyContent: 'center' }}>
@@ -147,11 +169,15 @@ export function Students() {
       {rows.length > 0 ? (
         <Anim type="rise" delay={80} style={{ marginTop: 16, backgroundColor: c.surface, borderRadius: 24, overflow: 'hidden' }}>
           {rows.map((s, i) => {
-            const L = look(s); const b = bal(s);
+            const L = look(s, sm[s.id]); const b = sm[s.id]?.balance ?? 0;
+            const unsent = (sm[s.id]?.unsent ?? 0) > 0;
             return (
-              <Tap key={s.id} onPress={() => go('student', { sel: s.id })} scaleTo={0.98} label={s.name + ', ' + rs(b) + ', ' + L.chip}
+              <Tap key={s.id} onPress={() => go('student', { sel: s.id })} scaleTo={0.98} label={s.name + ', ' + rs(b) + ', ' + L.chip + (unsent ? ', ' + t.receiptsNotSent : '')}
                 style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 12, paddingHorizontal: 16, minHeight: 76, borderTopWidth: i ? 1 : 0, borderTopColor: c.line }}>
-                <Avatar ini={initials(s.name)} size={46} bg={L.avBg} fg={L.avFg} fontSize={16} />
+                <View>
+                  <Avatar ini={initials(s.name)} size={46} bg={L.avBg} fg={L.avFg} fontSize={16} />
+                  {unsent ? <View style={{ position: 'absolute', top: -1, right: -1, width: 13, height: 13, borderRadius: 7, backgroundColor: c.amber, borderWidth: 2, borderColor: c.surface }} /> : null}
+                </View>
                 <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
                   <T size={17} weight={600} numberOfLines={1}>{s.name}</T>
                   <T size={14} color={c.text2} numberOfLines={1}>{placeOf(s)}</T>
@@ -237,7 +263,7 @@ export function Profile() {
               <T size={17} weight={600}>Ankur Bora</T>
               <T size={14} color={c.text2}>Kameng · B-214</T>
             </View>
-            <T size={20} weight={800} face="display">{rs(preview ? bal(preview) : 380)}</T>
+            <T size={20} weight={800} face="display">{rs(preview ? balance(state.entries, preview.id) : 380)}</T>
           </View>
         </View>
       </Anim>

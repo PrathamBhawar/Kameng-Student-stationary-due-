@@ -11,11 +11,15 @@ import { Money, StudentDetail } from './screens/StudentScreens';
 import { NewStudent, Scan, Verify } from './screens/ScanScreens';
 import { HostelPick } from './screens/Hostel';
 import { EditDetails, Visitor } from './screens/Visitor';
+import { Resolve } from './screens/Resolve';
+import { OpenDisputes, UnsentReceipts } from './screens/Lists';
+import { ConfirmSentSheet, DisputeSheet, ReceiptSheet, UndoSnackbar } from './components/Receipts';
 
 const SCREENS: Record<Screen, React.ComponentType> = {
   splash: Splash, intro1: Intro1, intro2: Intro2, lang: Language, auth: Auth, signin: SignIn, otp: Otp, name: Name,
   hostel: HostelPick, overview: Overview, students: Students, profile: Profile, scan: Scan, verify: Verify, newStudent: NewStudent, visitor: Visitor,
   student: StudentDetail, pay: Money, addDue: Money, edit: EditDetails,
+  resolve: Resolve, receipts: UnsentReceipts, disputes: OpenDisputes,
 };
 
 // Screens drawn on a dark/blue ground get a light status bar.
@@ -43,7 +47,7 @@ export function Navigator() {
   const canBack = useRef(false);
   const backRef = useRef(back);
   useEffect(() => {
-    canBack.current = state.stack.length > 1 && !state.sheet;
+    canBack.current = state.stack.length > 1 && !state.sheet && !state.receiptQueue.length && !state.confirmFor && !state.disputeFor;
     backRef.current = back;
   });
   const drag = useState(() => new Animated.Value(0))[0];
@@ -61,7 +65,8 @@ export function Navigator() {
   }))[0];
 
   const showTabs = TAB_SCREENS.includes(top);
-  const toastBottom = showTabs ? Math.max(bottom - 6, 16) + 82 : (top === 'pay' || top === 'addDue') ? 330 : (top === 'hostel' || top === 'newStudent' || top === 'visitor' || top === 'edit') ? Math.max(bottom, 16) + 76 : Math.max(bottom, 16) + 6;
+  const sheetUp = state.receiptQueue.length > 0 || !!state.confirmFor || !!state.disputeFor;
+  const toastBottom = !sheetUp && state.undo ? Math.max(bottom, 16) + 74 : sheetUp ? Math.max(bottom, 16) + 330 : showTabs ? Math.max(bottom - 6, 16) + 82 : (top === 'pay' || top === 'addDue') ? 330 : (top === 'hostel' || top === 'newStudent' || top === 'visitor' || top === 'edit') ? Math.max(bottom, 16) + 76 : Math.max(bottom, 16) + 6;
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }} {...pan.panHandlers}>
       <StatusBar style={LIGHT_BAR.includes(top) || isDark ? 'light' : 'dark'} animated />
@@ -76,6 +81,10 @@ export function Navigator() {
       </Animated.View>
       {showTabs ? <TabBar /> : null}
       <RemindSheet />
+      <ReceiptSheet />
+      <DisputeSheet />
+      <ConfirmSentSheet />
+      <UndoSnackbar atTop={sheetUp} />
       <Toast bottom={toastBottom} />
     </View>
   );

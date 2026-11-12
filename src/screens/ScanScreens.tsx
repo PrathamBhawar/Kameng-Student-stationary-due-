@@ -5,9 +5,10 @@ import Svg, { Path } from 'react-native-svg';
 import { Anim } from '../anim';
 import { Avatar, DismissKeyboard, Icon, PillButton, RadialBg, T, Tap } from '../components/ui';
 import { BackBtn, Barcode } from '../components/parts';
-import { bal, initials, prettyPhone, rs, NEW_ID } from '../data';
+import { initials, prettyPhone, rs, NEW_ID } from '../data';
+import { balance } from '../ledger/balance';
 import { grad } from '../theme';
-import { ScanState, tapLight, useLook, useStore } from '../store';
+import { ScanState, tapLight, useLook, useStore, useSummaries } from '../store';
 import { useSafe } from '../safe';
 import { useStatusLook } from './Home';
 import { HostelPicker } from './StudentScreens';
@@ -167,8 +168,8 @@ export function Verify() {
   const { c, t } = useLook();
   const { top, bottom, height, k } = useSafe();
   const s = find(state.sel);
-  const b = bal(s);
-  const L = useStatusLook()(s);
+  const b = balance(state.entries, s.id);
+  const L = useStatusLook()(s, useSummaries()[s.id]);
   const rows: [string, string, number, 600 | 700][] = [['Student ID', s.id, 16, 600], ['Hostel', s.hostel, 16, 600], ['Room', s.room, 16, 600], ['Phone', prettyPhone(s.phone), 18, 700]];
   const sheetTop = (top + 142) * k;
   return (
@@ -234,8 +235,8 @@ export function NewStudent() {
   const save = () => {
     if (!ok) { set({ nsTouched: true }); return; }
     const exists = state.students.some((s) => s.id === id);
-    const fresh = { id, name: ns.name.trim(), hostel: ns.hostel, room: ns.room.trim(), phone: ns.phone.length === 10 ? ns.phone : '', since: 0, tx: [] };
-    const students = exists ? state.students.map((s) => s.id === id ? { ...s, ...fresh, tx: s.tx } : s) : state.students.concat([fresh]);
+    const fresh = { id, name: ns.name.trim(), hostel: ns.hostel, room: ns.room.trim(), phone: ns.phone.length === 10 ? ns.phone : '' };
+    const students = exists ? state.students.map((s) => s.id === id ? { ...s, ...fresh } : s) : state.students.concat([fresh]);
     set({ students });
     landOnStudent(id, 'Student saved', 'addDue');
   };

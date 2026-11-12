@@ -114,7 +114,7 @@ export function Visitor() {
       initial={{ name: '', phone: '', city: '' }} onCancel={() => tab('overview')}
       onSubmit={(v) => {
         const id = visitorId();
-        const fresh: Student = { id, kind: 'visitor', name: v.name, phone: v.phone, city: v.city, hostel: '', room: '', since: 0, tx: [] };
+        const fresh: Student = { id, kind: 'visitor', name: v.name, phone: v.phone, city: v.city, hostel: '', room: '' };
         set({ students: state.students.concat([fresh]) });
         landOnStudent(id, 'Visitor saved', 'addDue');
       }} />
@@ -123,7 +123,7 @@ export function Visitor() {
 
 /** Edit details: a visitor's name, phone and city are all editable (there's no ID card to lock them to). */
 function EditVisitor() {
-  const { state, set, back, find, landOnStudent } = useStore();
+  const { state, set, back, find, landOnStudent, phoneAdded } = useStore();
   const s = find(state.sel);
   return (
     <VisitorForm
@@ -131,7 +131,8 @@ function EditVisitor() {
       initial={{ name: s.name, phone: s.phone, city: s.city || '' }} onCancel={back}
       onSubmit={(v) => {
         set({ students: state.students.map((x) => (x.id === s.id ? { ...x, name: v.name, phone: v.phone, city: v.city } : x)) });
-        landOnStudent(s.id, 'Details saved');
+        if (!s.phone && v.phone) phoneAdded(s.id).then(() => landOnStudent(s.id, 'Details saved'));
+        else landOnStudent(s.id, 'Details saved');
       }} />
   );
 }

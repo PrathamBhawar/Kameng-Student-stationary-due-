@@ -3,7 +3,7 @@ import { Animated, Easing, LayoutChangeEvent, Linking, PanResponder, Pressable, 
 import { useSafe } from '../safe';
 import { Glass, Icon, T, Tap } from './ui';
 import { Screen, firstName, useLook, useStore } from '../store';
-import { bal, rs } from '../data';
+import { remindMessage } from '../ledger/receipt';
 import { reducedMotion, SHEET_EASE } from '../anim';
 
 /** Back arrow. `onDark` = white on gradient screens. */
@@ -26,14 +26,17 @@ export function Barcode({ color, gap, scale = 1 }: { color: string; gap: number;
 }
 
 const OTP_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'del'];
-const AMT_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '00', '0', 'del'];
+// No 00 key: a stray double zero turned ₹12 into ₹1,200. Its slot is empty, as on the OTP keypad.
+const AMT_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'del'];
 
-export function Keypad({ kind }: { kind: 'otp' | 'amt' }) {
-  const { press } = useStore();
+/** Number keypad. `onKey` drives a local value instead of the store's OTP code / amount. */
+export function Keypad({ kind, onKey }: { kind: 'otp' | 'amt'; onKey?: (k: string) => void }) {
+  const { press: storePress } = useStore();
+  const press = onKey || storePress;
   const { c } = useLook();
   const keys = kind === 'otp' ? OTP_KEYS : AMT_KEYS;
   const key = (k: string, i: number) => {
-    const plain = k === '' || k === 'del' || k === '00';
+    const plain = k === '' || k === 'del';
     const bg = kind === 'otp' ? (k === '' || k === 'del' ? 'transparent' : 'rgba(255,255,255,0.12)') : (plain ? 'transparent' : c.keyBg);
     const fg = kind === 'otp' ? '#FFFFFF' : c.text;
     return (
@@ -144,7 +147,7 @@ export function TabBar() {
 
 /** "Remind Student" bottom sheet: WhatsApp or Call. Drag down or tap outside to close. */
 export function RemindSheet() {
-  const { state, closeRemind, find, toast } = useStore();
+  const { state, closeRemind, find, nameOf, toast } = useStore();
   const { c } = useLook();
   const insets = useSafe();
   const open = state.sheet;
@@ -176,7 +179,8 @@ export function RemindSheet() {
   if (!mounted) return null;
   const s = find(state.sel);
   const ph = s.phone;
-  const msg = 'Hi ' + s.name.split(' ')[0] + ', this is ' + firstName(state.ownerName) + ' from ' + state.shopHostel + ' Hostel shop. Your balance is ' + rs(bal(s)) + '. Please check. Thank you.';
+  // Asks only for the undisputed amount, and says what is under review.
+  const msg = remindMessage(s.id, { all: state.entries, nameOf, hostel: state.shopHostel, owner: firstName(state.ownerName), lang: state.lang });
   const openUrl = async (url: string, fallback: string | null, ok: string, fail: string) => {
     closeRemind();
     try {

@@ -3,31 +3,63 @@ import { Animated, KeyboardAvoidingView, Platform, ScrollView, TextInput, View }
 import { Anim, reducedMotion } from '../anim';
 import { Avatar, DismissKeyboard, Icon, LinearBg, PillButton, RadialBg, T, Tap } from '../components/ui';
 import { BackBtn, Keypad } from '../components/parts';
-import { bal, fmt, HOSTELS, initials, prettyPhone, rs, isVisitor, placeOf } from '../data';
+import { ReceiptStatusLine } from '../components/Receipts';
+import { Sheet, SheetButtons } from '../components/Sheet';
+import { fmt, HOSTELS, initials, prettyPhone, rs, isVisitor, placeOf } from '../data';
 import { grad } from '../theme';
-import { tapLight, tapWarn, useLook, useStore } from '../store';
+import { firstName, tapLight, tapWarn, useLook, useStore, useSummaries } from '../store';
 import { useSafe } from '../safe';
 import { useStatusLook } from './Home';
 import { Segmented } from './Onboarding';
+import {
+  balance, canDispute, disputedAfterWindow, disputedAmount, forStudent, history, HistoryRow, isAccepted, isMoveTo,
+  liveEffect, minutesSince, recentDisputes, recentSame, unusualAmount,
+} from '../ledger/balance';
+import type { Entry } from '../ledger/types';
+import { amountInWords, toAssameseDigits } from '../ledger/words';
+
+/** "Today, 12:20" for today's entries, otherwise "16 Sep". */
+export function shortWhen(iso: string): string {
+  const d = new Date(iso), now = new Date();
+  const p = (n: number) => String(n).padStart(2, '0');
+  if (d.toDateString() === now.toDateString()) return 'Today, ' + p(d.getHours()) + ':' + p(d.getMinutes());
+  return d.getDate() + ' ' + ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getMonth()];
+}
 
 // ───────────────────────── 14 Student profile
 export function StudentDetail() {
-  const { state, back, go, find, openRemind } = useStore();
+  const { state, back, go, find, openRemind, openReceipt, set, nameOf } = useStore();
   const { c, t } = useLook();
   const { top, width } = useSafe();
+  const sum = useSummaries();
   const s = find(state.sel);
-  const b = bal(s);
-  const L = useStatusLook()(s);
+  const b = balance(state.entries, s.id);
+  const disputed = disputedAmount(state.entries, s.id);
+  const L = useStatusLook()(s, sum[s.id]);
   const canPay = b > 0;
-  const rows = s.tx.map((x, i) => ({ ...x, after: bal({ ...s, tx: s.tx.slice(0, i + 1) }) })).reverse();
-  const dues = s.tx.filter((x) => x.type === 'due').reduce((a, x) => a + x.amt, 0);
-  const paid = s.tx.filter((x) => x.type === 'pay').reduce((a, x) => a + x.amt, 0);
+  const mine = forStudent(state.entries, s.id);
+  const rows = history(state.entries, s.id);
+  // A moved due arrives as transfer_in, a moved payment as transfer_out; the counter-entries only cancel the original.
+  const refType = (x: Entry) => state.entries.find((r) => r.id === x.refId)?.type;
+  const dues = mine.filter((x) => x.type === 'due' || (x.type === 'transfer_in' && refType(x) === 'due')).reduce((a, x) => a + Math.max(liveEffect(mine, x), 0), 0);
+  const paid = mine.filter((x) => x.type === 'payment' || (x.type === 'transfer_out' && refType(x) === 'payment')).reduce((a, x) => a + Math.max(-liveEffect(mine, x), 0), 0);
+  const monthDisputes = recentDisputes(state.entries, s.id);
   const action = (label: string, onPress: () => void, circle: React.ReactNode, disabled?: boolean, fg = c.text) => (
     <Tap onPress={onPress} disabled={disabled} label={label} scaleTo={0.92} style={{ flex: 1, alignItems: 'center', gap: 8, padding: 4 }}>
       {circle}
       <T size={14} weight={600} color={fg} center>{label}</T>
     </Tap>
   );
+  const onRow = (r: HistoryRow) => {
+    tapLight();
+    if (r.entry.dispute?.status === 'open') go('resolve', { resolveId: r.entry.id });
+    else openReceipt({ entryId: r.entry.id, kind: 'entry' });
+  };
+  const onLong = (r: HistoryRow) => {
+    if (!canDispute(state.entries, r.entry)) return;
+    tapWarn();
+    set({ disputeFor: r.entry.id });
+  };
   return (
     <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 40 }}>
       <View style={{ marginHorizontal: -16, paddingTop: top + 2, paddingHorizontal: 16, paddingBottom: 30, borderBottomLeftRadius: 34, borderBottomRightRadius: 34, overflow: 'hidden' }}>
@@ -51,10 +83,21 @@ export function StudentDetail() {
           <Anim type="pop" delay={120} style={{ marginTop: 18 }}>
             <T size={56} weight={800} face="display" ls={-0.04} lh={1.1} color="#FFFFFF">{rs(b)}</T>
           </Anim>
+          {disputed !== 0 ? (
+            <View accessibilityRole="text" style={{ marginTop: 6, paddingVertical: 4, paddingHorizontal: 12, borderRadius: 14, backgroundColor: c.amberSoft }}>
+              <T size={14} weight={700} color={c.amber}>{t.inDispute(rs(Math.abs(disputed)))}</T>
+            </View>
+          ) : null}
           <View style={{ marginTop: 8, height: 30, paddingHorizontal: 12, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.18)', flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: L.dot }} />
             <T size={14} weight={700} color="#FFFFFF">{L.chip}</T>
           </View>
+          {monthDisputes >= 3 || s.cardMisuse ? (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 6, marginTop: 8 }}>
+              {monthDisputes >= 3 ? <HeaderTag text={t.disputesThisMonth(monthDisputes)} /> : null}
+              {s.cardMisuse ? <HeaderTag text={t.cardMisused} /> : null}
+            </View>
+          ) : null}
         </View>
       </View>
 
@@ -87,13 +130,9 @@ export function StudentDetail() {
       <T size={22} weight={700} face="display" style={{ marginTop: 26, marginBottom: 12, marginHorizontal: 4 }} accessibilityRole="header">{t.history}</T>
       {rows.length ? (
         <Anim type="rise" delay={280} style={{ backgroundColor: c.surface, borderRadius: 22, overflow: 'hidden' }}>
-          {rows.map((x, i) => (
-            <TxRow key={s.id + ':' + (s.tx.length - 1 - i)} first={i === 0} fresh={!!x.fresh}
-              title={x.type === 'due' ? 'Due added' : 'Payment received'}
-              sub={x.date + ' · ' + (x.type === 'due' ? x.note : x.method) + ' · ' + x.by}
-              amt={rs(x.amt)} after={rs(x.after)} glyph={x.type === 'due' ? '+' : '₹'}
-              avBg={x.type === 'due' ? c.amberSoft : c.greenSoft} avFg={x.type === 'due' ? c.amber : c.green}
-              amtFg={x.type === 'due' ? c.text : c.green} />
+          {rows.map((r, i) => (
+            <TxRow key={r.entry.id} row={r} first={i === 0} fresh={state.freshId === r.entry.id} all={state.entries} nameOf={nameOf}
+              onPress={() => onRow(r)} onLongPress={() => onLong(r)} />
           ))}
         </Anim>
       ) : (
@@ -105,34 +144,80 @@ export function StudentDetail() {
   );
 }
 
-function TxRow({ first, fresh, title, sub, amt, after, glyph, avBg, avFg, amtFg }: {
-  first: boolean; fresh: boolean; title: string; sub: string; amt: string; after: string; glyph: string; avBg: string; avFg: string; amtFg: string;
+function HeaderTag({ text }: { text: string }) {
+  return (
+    <View style={{ paddingVertical: 4, paddingHorizontal: 10, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.16)' }}>
+      <T size={13} weight={600} color="#FFFFFF">{text}</T>
+    </View>
+  );
+}
+
+/** One history row: what happened, the balance left, the receipt status, and any dispute or change. */
+function TxRow({ row, first, fresh, all, nameOf, onPress, onLongPress }: {
+  row: HistoryRow; first: boolean; fresh: boolean; all: Entry[]; nameOf: (id: string) => string;
+  onPress: () => void; onLongPress: () => void;
 }) {
-  const { c } = useLook();
+  const { c, t } = useLook();
+  const e = row.entry;
   // The new entry fades in a highlight (design: background transition 1.2s).
   const hl = useState(() => new Animated.Value(0))[0];
   useEffect(() => {
     if (!fresh) { hl.setValue(0); return; }
     Animated.timing(hl, { toValue: 1, duration: reducedMotion() ? 0 : 1200, delay: 300, useNativeDriver: false }).start();
   }, [fresh, hl]);
+  const other = nameOf(e.otherStudentId || '');
+  const look = {
+    due: { title: t.dueAdded, glyph: '+', bg: c.amberSoft, fg: c.amber, amtFg: c.text, amt: rs(e.amount) },
+    payment: { title: t.paymentReceived, glyph: '₹', bg: c.greenSoft, fg: c.green, amtFg: c.green, amt: rs(e.amount) },
+    correction: { title: t.correction, glyph: '±', bg: c.surface2, fg: c.text2, amtFg: c.text2, amt: ((e.delta ?? 0) < 0 ? '−' : '+') + rs(Math.abs(e.delta ?? 0)) },
+    reversal: { title: t.removed, glyph: '×', bg: c.surface2, fg: c.text2, amtFg: c.text2, amt: rs(e.amount) },
+    transfer_out: { title: isMoveTo(all, e) ? t.movedTo(other) : t.movedFrom(other), glyph: '⇄', bg: c.surface2, fg: c.text2, amtFg: c.text2, amt: rs(e.amount) },
+    transfer_in: { title: isMoveTo(all, e) ? t.movedTo(other) : t.movedFrom(other), glyph: '⇄', bg: c.surface2, fg: c.text2, amtFg: c.text2, amt: rs(e.amount) },
+  }[e.type];
+  const ref = e.refId ? all.find((x) => x.id === e.refId) : undefined;
+  const detail = e.type === 'due' ? (e.note || 'Shop items') : e.type === 'payment' ? (e.method || 'Cash') : ref ? ref.receiptNo : '';
+  const struck = row.struck;
+  const struckText = !struck ? '' : struck.kind === 'removed' ? t.removed
+    : struck.kind === 'moved' ? t.movedTo(nameOf(struck.otherStudentId)) : t.correctedTo(rs(struck.newAmount));
+  const open = e.dispute?.status === 'open';
+  const accepted = isAccepted(e);
   return (
-    <Animated.View style={{
-      flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 12, paddingHorizontal: 16, minHeight: 72,
-      borderTopWidth: first ? 0 : 1, borderTopColor: c.line,
-      backgroundColor: hl.interpolate({ inputRange: [0, 1], outputRange: [c.surface, c.primarySoft] }),
-    }}>
-      <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: avBg, alignItems: 'center', justifyContent: 'center' }}>
-        <T fixed size={18} weight={800} face="display" color={avFg}>{glyph}</T>
-      </View>
-      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-        <T size={16} weight={600}>{title}</T>
-        <T size={13} color={c.text2} numberOfLines={1}>{sub}</T>
-      </View>
-      <View style={{ alignItems: 'flex-end', gap: 2 }}>
-        <T size={18} weight={700} face="display" color={amtFg}>{amt}</T>
-        <T size={12} color={c.text2}>Left {after}</T>
-      </View>
-    </Animated.View>
+    <Tap onPress={onPress} onLongPress={onLongPress} delayLongPress={450} scaleTo={0.985}
+      label={look.title + ', ' + look.amt + (open ? ', ' + t.disputed : '')}
+      accessibilityActions={canDispute(all, e) ? [{ name: 'dispute', label: t.studentSaysWrong }] : undefined}
+      onAccessibilityAction={() => onLongPress()}>
+      <Animated.View style={{
+        flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 12, paddingHorizontal: 16, minHeight: 72,
+        borderTopWidth: first ? 0 : 1, borderTopColor: c.line,
+        backgroundColor: hl.interpolate({ inputRange: [0, 1], outputRange: [c.surface, c.primarySoft] }),
+      }}>
+        <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: look.bg, alignItems: 'center', justifyContent: 'center', opacity: struck ? 0.6 : 1 }}>
+          <T fixed size={18} weight={800} face="display" color={look.fg}>{look.glyph}</T>
+        </View>
+        <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
+          <T size={16} weight={600} color={struck ? c.text2 : c.text} style={struck ? { textDecorationLine: 'line-through' } : undefined}>{look.title}</T>
+          <T size={13} color={c.text2} numberOfLines={1}>{shortWhen(e.createdAt) + ' · ' + e.receiptNo + (detail ? ' · ' + detail : '') + ' · ' + e.by}</T>
+          {struck ? <T size={13} weight={600} color={c.text2}>{struckText}</T> : null}
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+            {e.legacy ? null : <ReceiptStatusLine receipt={e.receipt} />}
+            {open ? (
+              <View style={{ paddingVertical: 2, paddingHorizontal: 8, borderRadius: 10, backgroundColor: c.amberSoft }}>
+                <T size={12} weight={700} color={c.amber}>{(disputedAfterWindow(e) ? t.disputedAfter : t.disputed) + ' · ' + t.reasons[e.dispute!.reason]}</T>
+              </View>
+            ) : null}
+            {accepted ? (
+              <View style={{ paddingVertical: 2, paddingHorizontal: 8, borderRadius: 10, backgroundColor: c.surface2 }}>
+                <T size={12} weight={600} color={c.text2}>{t.accepted}</T>
+              </View>
+            ) : null}
+          </View>
+        </View>
+        <View style={{ alignItems: 'flex-end', gap: 2 }}>
+          <T size={18} weight={700} face="display" color={struck ? c.text3 : look.amtFg} style={struck ? { textDecorationLine: 'line-through' } : undefined}>{look.amt}</T>
+          <T size={12} color={c.text2}>{t.left + ' ' + rs(row.after)}</T>
+        </View>
+      </Animated.View>
+    </Tap>
   );
 }
 
@@ -159,20 +244,26 @@ export function HostelPicker({ value, onPick, h = 44 }: { value: string; onPick:
 }
 
 export function EditStudent() {
-  const { state, set, back, find, landOnStudent } = useStore();
-  const { c, fs } = useLook();
+  const { state, set, back, find, landOnStudent, phoneAdded } = useStore();
+  const { c, t, fs } = useLook();
   const { top, bottom } = useSafe();
   const s = find(state.sel);
+  // A phone from the 1Stop ID is locked; a student with none can have their WhatsApp number added here.
+  const [newPhone, setNewPhone] = useState('');
+  const addingPhone = !s.phone;
   const room = state.editRoom.trim();
-  const changed = room.toUpperCase() !== s.room || state.editHostel !== s.hostel;
-  const ok = !!room && changed;
-  const save = () => {
+  const phoneOk = !addingPhone || newPhone.length === 0 || newPhone.length === 10;
+  const changed = room.toUpperCase() !== s.room || state.editHostel !== s.hostel || (addingPhone && newPhone.length === 10);
+  const ok = !!room && changed && phoneOk;
+  const save = async () => {
     if (!ok) return;
-    const students = state.students.map((x) => x.id !== s.id ? x : { ...x, hostel: state.editHostel, room: room.toUpperCase() });
+    const phone = addingPhone && newPhone.length === 10 ? newPhone : s.phone;
+    const students = state.students.map((x) => x.id !== s.id ? x : { ...x, hostel: state.editHostel, room: room.toUpperCase(), phone });
     set({ students });
+    if (addingPhone && phone) await phoneAdded(s.id);
     landOnStudent(s.id, 'Details saved');
   };
-  const locked: [string, string][] = [['Name', s.name], ['Student ID', s.id], ['Phone', prettyPhone(s.phone)]];
+  const locked: [string, string][] = [['Name', s.name], ['Student ID', s.id]].concat(addingPhone ? [] : [['Phone', prettyPhone(s.phone)]]) as [string, string][];
   return (
     <DismissKeyboard>
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: c.bg }}>
@@ -188,13 +279,28 @@ export function EditStudent() {
               <View key={k} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingHorizontal: 16, minHeight: 58, borderTopWidth: i ? 1 : 0, borderTopColor: c.line }}>
                 <T size={15} color={c.text2}>{k}</T>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 }}>
-                  <T size={16} weight={600} color={v === 'Not on ID' ? c.text2 : c.text} style={{ textAlign: 'right', flexShrink: 1 }}>{v}</T>
+                  <T size={16} weight={600} color={c.text} style={{ textAlign: 'right', flexShrink: 1 }}>{v}</T>
                   <View accessibilityLabel="Locked"><Icon name="lock" size={16} color={c.text3} /></View>
                 </View>
               </View>
             ))}
           </Anim>
-          <T size={13} color={c.text2} style={{ marginTop: 8, marginHorizontal: 4 }}>{s.phone ? 'From 1Stop ID. Locked.' : 'Phone missing. Re-scan ID.'}</T>
+          <T size={13} color={c.text2} style={{ marginTop: 8, marginHorizontal: 4 }}>{s.phone ? 'From 1Stop ID. Locked.' : t.addPhoneHint}</T>
+          {addingPhone ? (
+            <>
+              <T size={15} weight={600} style={{ marginTop: 22, marginBottom: 8, marginHorizontal: 4 }}>{t.phoneLabel}</T>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <View style={{ height: 56, paddingHorizontal: 14, borderRadius: 16, backgroundColor: c.surface2, justifyContent: 'center' }}>
+                  <T size={17} weight={600} color={c.text2}>+91</T>
+                </View>
+                <TextInput accessibilityLabel={t.phoneLabel} value={newPhone} onChangeText={(v) => setNewPhone(v.replace(/\D/g, '').slice(0, 10))}
+                  placeholder="10 digits" placeholderTextColor={c.text3} keyboardType="number-pad" textContentType="telephoneNumber" autoFocus
+                  keyboardAppearance={c.bg === '#0A0C10' ? 'dark' : 'light'}
+                  style={{ flex: 1, minWidth: 0, height: 56, borderRadius: 16, backgroundColor: c.surface, color: c.text, fontFamily: 'Inter_600SemiBold', fontSize: fs(18), paddingHorizontal: 16, borderWidth: 2, borderColor: phoneOk ? 'transparent' : c.red }} />
+              </View>
+              {!phoneOk ? <T accessibilityRole="alert" size={14} weight={600} color={c.red} style={{ marginTop: 6, marginHorizontal: 4 }}>Enter the 10-digit mobile number</T> : null}
+            </>
+          ) : null}
           <T size={15} weight={600} style={{ marginTop: 22, marginBottom: 8, marginHorizontal: 4 }}>Hostel</T>
           <HostelPicker value={state.editHostel} onPick={(h) => set({ editHostel: h })} />
           <T size={15} weight={600} style={{ marginTop: 22, marginBottom: 8, marginHorizontal: 4 }}>Room</T>
@@ -211,20 +317,37 @@ export function EditStudent() {
   );
 }
 
+/** The amount in words under the big number; Assamese shows the figure in Assamese numerals. */
+export function AmountWords({ n }: { n: number }) {
+  const { c, lang } = useLook();
+  if (!n) return <View style={{ minHeight: 18 }} />;
+  // TODO(as): Assamese number words; until then the figure in Assamese numerals.
+  const text = lang === 'as' ? toAssameseDigits('₹' + fmt(n)) + ' টকা' : amountInWords(n);
+  return <T size={13} color={c.text2} center style={{ minHeight: 18 }} accessibilityLabel={text}>{text}</T>;
+}
+
+/** Name for the Save button: first name, shortened if long. The amount is never cut. */
+const shortName = (name: string) => { const f = firstName(name); return f.length > 12 ? f.slice(0, 11) + '…' : f; };
+
 // ───────────────────────── 16 Receive Payment / 17 Add due
 export function Money() {
   const { state, set, back, find, addTx } = useStore();
   const { c, t, fs } = useLook();
   const { top, bottom } = useSafe();
+  const sum = useSummaries();
   const scr = state.stack[state.stack.length - 1];
   const isPay = scr === 'pay';
   const s = find(state.sel);
-  const cb = bal(s);
-  const L = useStatusLook()(s);
+  const cb = balance(state.entries, s.id);
+  const L = useStatusLook()(s, sum[s.id]);
   const n = parseInt(state.amt || '0', 10);
   const over = isPay ? n > cb : n > 10000;
   const okAmt = n > 0 && !over;
-  const enabled = okAmt && !state.saving;
+  // Save locks on the first tap until navigation finishes: a double tap makes exactly one entry.
+  const [locked, setLocked] = useState(false);
+  const lockRef = useRef(false);
+  const [ask, setAsk] = useState<null | { kind: 'dup'; minutes: number } | { kind: 'unusual'; ratio: number }>(null);
+  const enabled = okAmt && !state.saving && !locked;
   const quick: [string, number][] = (isPay
     ? [['Full ' + rs(cb), cb], ['Half ' + rs(Math.round(cb / 2)), Math.round(cb / 2)], [rs(100), 100]]
     : [['₹20', 20], ['₹50', 50], ['₹100', 100], ['₹200', 200]]) as [string, number][];
@@ -247,8 +370,33 @@ export function Money() {
     prevOver.current = over;
   }, [state.amt]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const type = isPay ? 'payment' : 'due';
+  const unlock = () => { lockRef.current = false; setLocked(false); setAsk(null); };
+  const doSave = () => { setAsk(null); addTx(isPay ? 'pay' : 'due'); };
+  /** Duplicate check, then the unusual-amount check, then save. */
+  const checkUnusual = () => {
+    const u = unusualAmount(state.entries, s.id, type, n);
+    if (u.unusual) { tapWarn(); setAsk({ kind: 'unusual', ratio: u.ratio }); return; }
+    doSave();
+  };
+  const onSave = () => {
+    if (lockRef.current || !okAmt || state.saving) return;
+    lockRef.current = true;
+    setLocked(true);
+    const dup = recentSame(state.entries, s.id, type, n);
+    if (dup) {
+      tapWarn();
+      setAsk({ kind: 'dup', minutes: minutesSince(dup.createdAt) });
+      return;
+    }
+    checkUnusual();
+  };
+
   const lineFg = isPay ? c.green : c.amber;
   const full = okAmt && n === cb;
+  const name = shortName(s.name);
+  const label = okAmt ? (isPay ? t.receiveFrom(rs(n), name) : t.saveFor(rs(n), name)) : (isPay ? 'Confirm' : 'Save');
+  const ratio = ask?.kind === 'unusual' ? ask.ratio : 0;
   return (
     <View style={{ flex: 1, paddingTop: top, paddingHorizontal: 16, paddingBottom: Math.max(bottom - 10, 12), backgroundColor: c.bg }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 44 }}>
@@ -278,15 +426,16 @@ export function Money() {
           </Animated.View>
           <Anim type="blink" style={{ width: 3, height: 48, borderRadius: 2, backgroundColor: c.primary, marginLeft: 4 }} />
         </Animated.View>
-        <T accessibilityRole="text" size={15} weight={600} color={over ? c.red : c.text2} center style={{ minHeight: 20 }}>{hint}</T>
+        <AmountWords n={n} />
+        <T accessibilityRole="text" size={15} weight={600} color={over ? c.red : c.text2} center style={{ minHeight: 20, marginTop: 2 }}>{hint}</T>
 
         <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
-          {quick.filter((q) => q[1] > 0).map(([label, v]) => {
+          {quick.filter((q) => q[1] > 0).map(([qLabel, v]) => {
             const on = n === v;
             return (
-              <Tap key={label} onPress={() => { tapLight(); set({ amt: String(v) }); }} label={label} scaleTo={0.94}
-                style={{ flex: 1, minWidth: 0, height: 42, borderRadius: 21, backgroundColor: on ? c.text : c.surface, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 }}>
-                <T size={15} weight={600} color={on ? c.bg : c.text} numberOfLines={1} adjustsFontSizeToFit>{label}</T>
+              <Tap key={qLabel} onPress={() => { tapLight(); set({ amt: String(v) }); }} label={qLabel} scaleTo={0.94}
+                style={{ flex: 1, minWidth: 0, height: 44, borderRadius: 22, backgroundColor: on ? c.text : c.surface, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 }}>
+                <T size={15} weight={600} color={on ? c.bg : c.text} numberOfLines={1} adjustsFontSizeToFit>{qLabel}</T>
               </Tap>
             );
           })}
@@ -316,10 +465,21 @@ export function Money() {
         </View>
       </ScrollView>
 
-      <PillButton title={okAmt ? (isPay ? 'Confirm ' + rs(n) : 'Save ' + rs(n)) : (isPay ? 'Confirm' : 'Save')} disabled={!enabled}
-        onPress={() => addTx(isPay ? 'pay' : 'due')} style={{ marginTop: 10 }}
-        bg={enabled ? (isPay ? c.green : c.primary) : c.disBg} fg={enabled ? '#FFFFFF' : c.disFg} />
+      <PillButton title={locked ? '' : label} label={label} disabled={!enabled} onPress={onSave} style={{ marginTop: 10 }}
+        bg={okAmt ? (isPay ? c.green : c.primary) : c.disBg} fg={okAmt ? '#FFFFFF' : c.disFg}>
+        {locked ? <Icon name="check" size={24} color="#FFFFFF" sw={2.8} /> : null}
+      </PillButton>
       <View style={{ marginTop: 10 }}><Keypad kind="amt" /></View>
+
+      <Sheet open={ask?.kind === 'dup'} onClose={unlock} title={ask?.kind === 'dup' ? t.sameAsAgo(ask.minutes) : ''}>
+        <T size={16} color={c.text2} style={{ marginTop: 6 }}>{t.addAgainQ}</T>
+        <SheetButtons primary={t.addAgain} onPrimary={checkUnusual} secondary={t.wasDuplicate} onSecondary={unlock} />
+      </Sheet>
+      <Sheet open={ask?.kind === 'unusual'} onClose={unlock}
+        title={ratio > 3 ? t.usualTimes(rs(n), Math.round(ratio), firstName(s.name)) : t.largeAmount(rs(n))}>
+        <T size={16} color={c.text2} style={{ marginTop: 6 }}>{t.correctQ}</T>
+        <SheetButtons primary={t.yesSave} onPrimary={doSave} secondary={t.changeAmount} onSecondary={unlock} />
+      </Sheet>
     </View>
   );
 }

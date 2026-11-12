@@ -12,14 +12,13 @@ import { NewStudent, Scan, Verify } from './screens/ScanScreens';
 import { HostelPick } from './screens/Hostel';
 import { EditDetails, Visitor } from './screens/Visitor';
 import { Resolve } from './screens/Resolve';
-import { OpenDisputes, UnsentReceipts } from './screens/Lists';
 import { ConfirmSentSheet, DisputeSheet, ReceiptSheet, UndoSnackbar } from './components/Receipts';
 
 const SCREENS: Record<Screen, React.ComponentType> = {
   splash: Splash, intro1: Intro1, intro2: Intro2, lang: Language, auth: Auth, signin: SignIn, otp: Otp, name: Name,
   hostel: HostelPick, overview: Overview, students: Students, profile: Profile, scan: Scan, verify: Verify, newStudent: NewStudent, visitor: Visitor,
   student: StudentDetail, pay: Money, addDue: Money, edit: EditDetails,
-  resolve: Resolve, receipts: UnsentReceipts, disputes: OpenDisputes,
+  resolve: Resolve,
 };
 
 // Screens drawn on a dark/blue ground get a light status bar.

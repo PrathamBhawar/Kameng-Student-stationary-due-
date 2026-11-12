@@ -1,31 +1,12 @@
 import React from 'react';
-import { ScrollView, View } from 'react-native';
+import { View } from 'react-native';
 import { Anim } from '../anim';
 import { Avatar, Icon, T, Tap } from '../components/ui';
-import { BackBtn } from '../components/parts';
 import { ReceiptStatusLine } from '../components/Receipts';
 import { initials, rs } from '../data';
 import { disputeDaysOpen, openDisputes, STALE_DISPUTE_DAYS, unsentReceipts } from '../ledger/balance';
 import { tapLight, useLook, useStore } from '../store';
-import { useSafe } from '../safe';
 import { shortWhen } from './StudentScreens';
-
-function Frame({ title, children }: { title: string; children: React.ReactNode }) {
-  const { back } = useStore();
-  const { c } = useLook();
-  const { top } = useSafe();
-  return (
-    <View style={{ flex: 1, backgroundColor: c.bg, paddingTop: top }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, minHeight: 44 }}>
-        <BackBtn color={c.text} onPress={back} />
-      </View>
-      <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
-        <Anim type="rise" style={{ marginHorizontal: 4, marginTop: 4 }}><T size={34} weight={800} face="display" ls={-0.03} accessibilityRole="header">{title}</T></Anim>
-        {children}
-      </ScrollView>
-    </View>
-  );
-}
 
 function Empty({ text }: { text: string }) {
   const { c } = useLook();
@@ -39,13 +20,13 @@ function Empty({ text }: { text: string }) {
   );
 }
 
-/** Overview → Receipts not sent: every entry whose receipt the student isn't confirmed to have, with one-tap Send. */
-export function UnsentReceipts() {
+/** Students → Not sent: every entry whose receipt the student isn't confirmed to have, with one-tap Send. */
+export function UnsentList({ show }: { show: (studentId: string) => boolean }) {
   const { state, find, sendReceipt, openReceipt, addNumber } = useStore();
   const { c, t } = useLook();
-  const list = unsentReceipts(state.entries);
+  const list = unsentReceipts(state.entries).filter(({ entry }) => show(entry.studentId));
   return (
-    <Frame title={t.unsentTitle}>
+    <>
       {list.length ? (
         <Anim type="rise" delay={80} style={{ marginTop: 16, backgroundColor: c.surface, borderRadius: 24, overflow: 'hidden' }}>
           {list.map(({ entry: e, kind }, i) => {
@@ -78,17 +59,17 @@ export function UnsentReceipts() {
           })}
         </Anim>
       ) : <Empty text={t.allSent} />}
-    </Frame>
+    </>
   );
 }
 
-/** Overview → Disputes: every open dispute, newest first. Never resolved automatically. */
-export function OpenDisputes() {
+/** Students → Disputes: every open dispute, newest first. Never resolved automatically. */
+export function DisputeList({ show }: { show: (studentId: string) => boolean }) {
   const { state, find, go } = useStore();
   const { c, t } = useLook();
-  const list = openDisputes(state.entries);
+  const list = openDisputes(state.entries).filter((e) => show(e.studentId));
   return (
-    <Frame title={t.disputes}>
+    <>
       {list.length ? (
         <Anim type="rise" delay={80} style={{ marginTop: 16, backgroundColor: c.surface, borderRadius: 24, overflow: 'hidden' }}>
           {list.map((e, i) => {
@@ -110,6 +91,6 @@ export function OpenDisputes() {
           })}
         </Anim>
       ) : <Empty text={t.noDisputes} />}
-    </Frame>
+    </>
   );
 }

@@ -4,6 +4,7 @@ import { Anim, reducedMotion } from '../anim';
 import { Avatar, Glass, Icon, LinearBg, OwnerAvatar, RadialBg, T, Tap } from '../components/ui';
 import { initials, rs, Student, DEMO_ID, placeOf } from '../data';
 import { balance, openDisputes, Summary, unsentReceipts } from '../ledger/balance';
+import { DisputeList, UnsentList } from './Lists';
 import { grad, sizes } from '../theme';
 import { Filter, firstName, tapLight, useLook, useStore, useSummaries } from '../store';
 import { useSafe } from '../safe';
@@ -25,7 +26,7 @@ export function useStatusLook() {
 
 // ───────────────────────── 07 Overview
 export function Overview() {
-  const { state, set, tab, go } = useStore();
+  const { state, set, tab } = useStore();
   const { t, lang } = useLook();
   const { top, width } = useSafe();
   const sm = useSummaries();
@@ -35,12 +36,10 @@ export function Overview() {
   const sumBal = (a: Student[]) => a.reduce((x, s) => x + sm[s.id].balance, 0);
   // Pending and overdue ask only for what isn't in dispute.
   const sum = (a: Student[]) => a.reduce((x, s) => x + Math.max(sm[s.id].undisputed, 0), 0);
-  const unsent = unsentReceipts(state.entries).length;
-  const disputes = openDisputes(state.entries).length;
   const goList = (f: Filter) => set({ stack: ['students'], dir: 1, f, q: '' });
   const owner = (state.ownerName || 'S').trim()[0]?.toUpperCase() || 'S';
-  const row = (icon: 'clock' | 'warn' | 'alert', tint: string, fg: string, title: string, sub: string, amt: string, amtFg: string, f: Filter | (() => void)) => (
-    <Tap onPress={() => (typeof f === 'function' ? f() : goList(f))} label={title + ', ' + amt} scaleTo={0.98}
+  const row = (icon: 'clock' | 'warn', tint: string, fg: string, title: string, sub: string, amt: string, amtFg: string, f: Filter) => (
+    <Tap onPress={() => goList(f)} label={title + ', ' + amt} scaleTo={0.98}
       style={{ flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16, minHeight: 80 }}>
       <View style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: tint, alignItems: 'center', justifyContent: 'center' }}>
         <Icon name={icon} size={24} color={fg} />
@@ -82,18 +81,6 @@ export function Overview() {
             {row('clock', 'rgba(243,179,83,0.18)', '#F3B353', t.pending, t.n(pd.length), rs(sum(pd)), '#FFFFFF', 'pending')}
             <View style={{ height: 1, backgroundColor: 'rgba(255,255,255,0.08)', marginLeft: 76 }} />
             {row('warn', 'rgba(255,128,118,0.18)', '#FF8F86', t.overdue, t.n(od.length), rs(sum(od)), '#FF9A91', 'overdue')}
-            {unsent > 0 ? (
-              <>
-                <View style={{ height: 1, backgroundColor: 'rgba(255,255,255,0.08)', marginLeft: 76 }} />
-                {row('alert', 'rgba(243,179,83,0.18)', '#F3B353', t.receiptsNotSent, '', String(unsent), '#FFFFFF', () => go('receipts'))}
-              </>
-            ) : null}
-            {disputes > 0 ? (
-              <>
-                <View style={{ height: 1, backgroundColor: 'rgba(255,255,255,0.08)', marginLeft: 76 }} />
-                {row('alert', 'rgba(243,179,83,0.18)', '#F3B353', t.disputes, '', String(disputes), '#F3B353', () => go('disputes'))}
-              </>
-            ) : null}
           </Glass>
         </Anim>
         <T size={13} color="rgba(255,255,255,0.55)" center style={{ marginTop: 16 }}>{lang === 'as' ? 'নমুনা তথ্য' : 'Sample data'}</T>
@@ -135,9 +122,17 @@ export function Students() {
     || (s.city || '').toLowerCase().includes(q) || s.phone.includes(q));
   const order = { overdue: 0, pending: 1, disputed: 2, settled: 3 };
   const st = (s: Student) => sm[s.id]?.status ?? 'settled';
+  const inQ = new Set(byQ.map((s) => s.id));
+  const show = (id: string) => inQ.has(id);
+  // Counts match the lists the pills open: one per receipt, one per dispute.
+  const nUnsent = unsentReceipts(state.entries).filter((u) => show(u.entry.studentId)).length;
+  const nDisputes = openDisputes(state.entries).filter((e) => show(e.studentId)).length;
   const rows = byQ.filter((s) => state.f === 'all' || st(s) === state.f)
     .sort((a, b) => (order[st(a)] - order[st(b)]) || ((sm[b.id]?.days ?? 0) - (sm[a.id]?.days ?? 0)));
   const chips: [Filter, string][] = [['all', t.all], ['pending', t.pending], ['overdue', t.overdue], ['settled', t.settled]];
+  // Amber pills for work waiting on the shopkeeper; shown only while there is some (or while selected).
+  const extra: [Filter, string, number][] = ([['unsent', t.unsentTitle, nUnsent], ['disputes', t.disputes, nDisputes]] as [Filter, string, number][])
+    .filter(([k, , n]) => n > 0 || state.f === k);
   return (
     <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" showsVerticalScrollIndicator={false}
       contentContainerStyle={{ paddingTop: top + 8, paddingHorizontal: 16, paddingBottom: 130 }}>
@@ -166,7 +161,21 @@ export function Students() {
           );
         })}
       </ScrollView>
-      {rows.length > 0 ? (
+      {extra.length ? (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+          {extra.map(([k, label, n]) => {
+            const on = state.f === k;
+            return (
+              <Tap key={k} onPress={() => { tapLight(); smooth(); set({ f: on ? 'all' : k }); }} accessibilityRole="tab" accessibilityState={{ selected: on }} label={label + ' ' + n}
+                style={{ height: 40, paddingHorizontal: 14, borderRadius: 20, backgroundColor: on ? c.amber : c.amberSoft, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                {k === 'unsent' ? <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: on ? '#FFFFFF' : c.amber }} /> : <Icon name="alert" size={16} color={on ? '#FFFFFF' : c.amber} sw={2.4} />}
+                <T size={15} weight={600} color={on ? '#FFFFFF' : c.amber}>{label} {n}</T>
+              </Tap>
+            );
+          })}
+        </View>
+      ) : null}
+      {state.f === 'unsent' ? <UnsentList show={show} /> : state.f === 'disputes' ? <DisputeList show={show} /> : rows.length > 0 ? (
         <Anim type="rise" delay={80} style={{ marginTop: 16, backgroundColor: c.surface, borderRadius: 24, overflow: 'hidden' }}>
           {rows.map((s, i) => {
             const L = look(s, sm[s.id]); const b = sm[s.id]?.balance ?? 0;

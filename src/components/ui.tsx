@@ -43,14 +43,18 @@ const APressable = Animated.createAnimatedComponent(Pressable);
 type TapProps = Omit<PressableProps, 'style'> & { style?: StyleProp<ViewStyle>; scaleTo?: number; label?: string };
 
 /** Pressable with a springy press-down, used for every button in the app. */
-export function Tap({ style, scaleTo = 0.96, label, disabled, children, onPressIn, onPressOut, ...rest }: TapProps) {
+export function Tap({ style, scaleTo = 0.96, label, disabled, children, onPressIn, onPressOut, accessibilityState, ...rest }: TapProps) {
   const s = useState(() => new Animated.Value(1))[0];
+  const a11y = { disabled: !!disabled, ...accessibilityState };
   const to = (v: number) => Animated.spring(s, { toValue: v, useNativeDriver: true, speed: 40, bounciness: v === 1 ? 8 : 0 }).start();
   return (
     <APressable
       accessibilityRole="button"
       accessibilityLabel={label}
-      accessibilityState={{ disabled: !!disabled }}
+      accessibilityState={a11y}
+      // react-native-web reads the aria-* props, not accessibilityState.
+      aria-selected={a11y.selected}
+      aria-checked={a11y.checked}
       disabled={disabled}
       onPressIn={(e) => { to(scaleTo); onPressIn?.(e); }}
       onPressOut={(e) => { to(1); onPressOut?.(e); }}

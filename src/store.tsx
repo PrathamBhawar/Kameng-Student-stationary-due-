@@ -14,11 +14,11 @@ import { receiptMessage, whatsAppUrl } from './ledger/receipt';
 export type Screen =
   | 'splash' | 'intro1' | 'intro2' | 'lang' | 'auth' | 'signin' | 'otp' | 'name'
   | 'hostel' | 'overview' | 'students' | 'profile' | 'scan' | 'verify' | 'newStudent' | 'visitor'
-  | 'student' | 'pay' | 'addDue' | 'edit' | 'resolve' | 'receipts' | 'disputes';
+  | 'student' | 'pay' | 'addDue' | 'edit' | 'resolve';
 
 export type ScanState = 'ready' | 'reading' | 'invalid' | 'denied';
 export type ThemeKey = 'light' | 'dark' | 'system';
-export type Filter = 'all' | 'pending' | 'overdue' | 'settled';
+export type Filter = 'all' | 'pending' | 'overdue' | 'settled' | 'unsent' | 'disputes';
 /** Who is signed in, and how. `email` holds the phone number for phone sign-in. */
 export type Account = { provider: 'email' | 'google' | 'apple' | 'phone' | 'demo'; name: string; email: string };
 
